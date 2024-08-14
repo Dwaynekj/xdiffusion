@@ -4,20 +4,27 @@ import math
 import os
 from pathlib import Path
 import torch
-from torch.optim import Adam
 from torch.utils.data import DataLoader
-from torchinfo import summary
-from torchvision import transforms, utils
-from torchvision.datasets import MNIST
+from torchvision import utils as torchvision_utils
+from torchvision.transforms import v2
 from tqdm import tqdm
 from typing import List
 
-from xdiffusion.utils import cycle, load_yaml, DotConfig
+from xdiffusion.utils import (
+    load_yaml,
+    cycle,
+    DotConfig,
+    video_tensor_to_gif,
+    normalize_to_neg_one_to_one,
+)
 from xdiffusion.ddpm import GaussianDiffusion_DDPM
-from xdiffusion.diffusion import DiffusionModel
 from xdiffusion.cascade import GaussianDiffusionCascade
+from xdiffusion.diffusion import DiffusionModel
+from xdiffusion.datasets.moving_mnist import MovingMNIST
+from xdiffusion.training_utils import preprocess_training_videos
+from xdiffusion import masking
 
-OUTPUT_NAME = "output/image/mnist"
+OUTPUT_NAME = "output/video/moving_mnist"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
@@ -25,9 +32,10 @@ def train(
     num_training_steps: int,
     batch_size: int,
     config_path: str,
-    sample_with_guidance: bool,
     save_and_sample_every_n: int,
     load_model_weights_from_checkpoint: str,
+    resume_from: str,
+    sample_with_guidance: bool = False,
 ):
     global OUTPUT_NAME
     OUTPUT_NAME = f"{OUTPUT_NAME}/{str(Path(config_path).stem)}"
@@ -41,46 +49,28 @@ def train(
     # Load the MNIST dataset. This is a supervised dataset so
     # it contains both images and class labels. We will ignore the class
     # labels for now.
-    dataset = MNIST(
+    dataset = MovingMNIST(
         ".",
-        train=True,
-        transform=transforms.Compose(
+        transform=v2.Compose(
             [
-                # To make the math work out easier, resize the MNIST
-                # images from (28,28) to (32, 32).
-                transforms.Resize(
-                    size=(config.data.image_size, config.data.image_size)
+                # To the memory requirements, resize the MNIST
+                # videos from (64,64) to (32, 32).
+                v2.Resize(
+                    size=(config.data.image_size, config.data.image_size),
+                    antialias=True,
                 ),
-                # Conversion to tensor scales the data from (0,255)
-                # to (0,1).
-                transforms.ToTensor(),
+                # Convert the motion videos to (0,1) float range
+                v2.ToDtype(torch.float32, scale=True),
             ]
         ),
-        download=True,
-    )
-
-    validation_dataset = MNIST(
-        ".",
-        train=False,
-        transform=transforms.Compose(
-            [
-                # To make the math work out easier, resize the MNIST
-                # images from (28,28) to (32, 32).
-                transforms.Resize(
-                    size=(config.data.image_size, config.data.image_size)
-                ),
-                # Conversion to tensor scales the data from (0,255)
-                # to (0,1).
-                transforms.ToTensor(),
-            ]
-        ),
-        download=True,
     )
 
     # Create the dataloader for the MNIST dataset
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
 
-    num_samples = 64
+    # Technically this is not correct, as the val set is the same as the train set
+    # TODO: Create a real validation set for Moving MNIST.
+    num_samples = 16
     validation_dataloader = DataLoader(
         dataset, batch_size=num_samples, shuffle=True, num_workers=4
     )
@@ -88,13 +78,16 @@ def train(
     # Create the diffusion model we are going to train, with a UNet
     # specifically for the MNIST dataset.
     if "diffusion_cascade" in config:
-        diffusion_model = GaussianDiffusionCascade(config)
+        diffusion_model = GaussianDiffusionCascade(config=config)
     else:
         diffusion_model = GaussianDiffusion_DDPM(config=config)
 
     # Load the model weights if we have them
     if load_model_weights_from_checkpoint:
         diffusion_model.load_checkpoint(load_model_weights_from_checkpoint)
+
+    if resume_from:
+        diffusion_model.load_checkpoint(resume_from)
 
     # Build context to display the model summary.
     diffusion_model.print_model_summary()
@@ -123,6 +116,13 @@ def train(
     #  for the 256 × 256 images, which seemed unstable to train with the larger learning rate."
     optimizers = diffusion_model.configure_optimizers(learning_rate=2e-4)
 
+    # Load the optimizers if we have them from the checkpoint
+    if resume_from:
+        checkpoint = torch.load(resume_from, map_location="cpu")
+        num_optimizers = checkpoint["num_optimizers"]
+        for i in range(num_optimizers):
+            optimizers[i].load_state_dict(checkpoint["optimizer_state_dicts"][i])
+
     # Move the model and the optimizer to the accelerator as well.
     diffusion_model = accelerator.prepare(diffusion_model)
     for optimizer_idx in range(len(optimizers)):
@@ -137,6 +137,18 @@ def train(
             learning_rate_schedules[schedule_idx]
         )
 
+    # Create a mask generation strategy for each model (if a cascade)
+    mask_generators = []
+    for model in diffusion_model.models():
+        if "training" in model.config() and "mask_ratios" in model.config().training:
+            mask_generators.append(
+                masking.OpenSoraMaskGenerator(
+                    mask_ratios=model.config().training.mask_ratios.to_dict()
+                )
+            )
+        else:
+            mask_generators.append(masking.IdentityMaskGenerator())
+
     # Step counter to keep track of training
     step = 0
 
@@ -149,62 +161,57 @@ def train(
     with tqdm(initial=step, total=num_training_steps) as progress_bar:
         # Perform gradient descent for the given number of training steps.
         while step < num_training_steps:
-            # The dataset has images and classes. Let's use the classes,
+            # The dataset has videos and classes. Let's use the classes,
             # and convert them into a fixed embedding space.
-            images, classes = next(dataloader)
-            context = {"classes": classes}
+            source_videos, labels = next(dataloader)
+            context = {"labels": labels}
 
-            # Convert the labels to prompts
-            prompts = convert_labels_to_prompts(classes)
-            context["text_prompts"] = prompts
+            # Convert the labels to text prompts
+            text_prompts = convert_labels_to_prompts(labels)
+            context["text_prompts"] = text_prompts
 
             # Train each cascade in the model using the given data.
             stage_loss = 0
-            for model_for_layer, optimizer_for_layer, schedule_for_layer in zip(
-                diffusion_model.models(), optimizers, learning_rate_schedules
+            for stage_idx, (
+                model_for_layer,
+                optimizer_for_layer,
+                schedule_for_layer,
+                mask_generator,
+            ) in enumerate(
+                zip(
+                    diffusion_model.models(),
+                    optimizers,
+                    learning_rate_schedules,
+                    mask_generators,
+                )
             ):
                 # Is this a super resolution model? If it is, then generate
                 # the low resolution imagery as conditioning.
                 config_for_layer = model_for_layer.config()
                 context_for_layer = context.copy()
-                images_for_layer = images
+
+                # Preprocess the training videos (e.g. clip or skip frames to match the setup)
+                videos_for_layer, mask_for_layer, context = preprocess_training_videos(
+                    source_videos=source_videos,
+                    config=config_for_layer,
+                    context=context_for_layer,
+                    mask_generator=mask_generator,
+                )
+                context_for_layer["video_mask"] = mask_for_layer
 
                 if "super_resolution" in config_for_layer:
-                    # First create the low resolution context.
-                    low_resolution_spatial_size = (
-                        config_for_layer.super_resolution.low_resolution_spatial_size
-                    )
-                    low_resolution_images = transforms.functional.resize(
-                        images,
-                        size=(
-                            low_resolution_spatial_size,
-                            low_resolution_spatial_size,
-                        ),
-                        antialias=True,
-                    )
-                    context_for_layer[
-                        config_for_layer.super_resolution.conditioning_key
-                    ] = low_resolution_images
-
-                # If the images are not the right shape for the model input, then
-                # we need to resize them too. This could happen if we are the intermediate
-                # super resolution layers of a multi-layer cascade.
-                model_input_spatial_size = config_for_layer.data.image_size
-
-                B, C, H, W = images.shape
-                if H != model_input_spatial_size or W != model_input_spatial_size:
-                    images_for_layer = transforms.functional.resize(
-                        images,
-                        size=(
-                            model_input_spatial_size,
-                            model_input_spatial_size,
-                        ),
-                        antialias=True,
+                    context_for_layer = _add_low_resolution_context(
+                        context=context_for_layer,
+                        config=config_for_layer,
+                        training_videos=videos_for_layer,
+                        source_videos=source_videos,
                     )
 
                 # Calculate the loss on the batch of training data.
                 loss_dict = model_for_layer.loss_on_batch(
-                    images=images_for_layer, context=context_for_layer
+                    images=videos_for_layer,
+                    context=context_for_layer,
+                    stage_idx=stage_idx,
                 )
                 loss = loss_dict["loss"]
 
@@ -273,7 +280,7 @@ def sample(
     diffusion_model: DiffusionModel,
     step,
     config: DotConfig,
-    validation_dataloader: DataLoader,
+    validation_dataloader,
     num_samples=64,
     sample_with_guidance: bool = False,
 ):
@@ -281,28 +288,38 @@ def sample(
 
     context = {}
     if "super_resolution" in config:
-        images, classes = next(iter(validation_dataloader))
+        source_videos, classes = next(iter(validation_dataloader))
         prompts = convert_labels_to_prompts(classes)
         context["text_prompts"] = prompts
         context["classes"] = classes
 
-        # Downsample to create the low resolution context
-        low_resolution_spatial_size = (
-            config.super_resolution.low_resolution_spatial_size
+        videos, context = preprocess_training_videos(
+            source_videos=source_videos, config=config, context=context
         )
-        low_resolution_images = transforms.functional.resize(
-            images,
-            size=(
-                low_resolution_spatial_size,
-                low_resolution_spatial_size,
-            ),
-            antialias=True,
+        context = _add_low_resolution_context(
+            context=context,
+            config=config,
+            training_videos=videos,
+            source_videos=source_videos,
         )
-        context[config.super_resolution.conditioning_key] = low_resolution_images
+
+        # Save the low-resolution imagery if it was used.
+        video_tensor_to_gif(
+            context[config.super_resolution.conditioning_key],
+            str(f"{OUTPUT_NAME}/low_resolution_context-{step}.gif"),
+        )
+        video_tensor_to_gif(
+            source_videos,
+            str(f"{OUTPUT_NAME}/low_resolution_source-{step}.gif"),
+        )
+        video_tensor_to_gif(
+            videos,
+            str(f"{OUTPUT_NAME}/low_resolution_preprocessed-{step}.gif"),
+        )
     else:
         # Sample from the model to check the quality.
         classes = torch.randint(
-            0, config.data.num_classes, size=(num_samples,), device=device
+            0, config.data.num_classes, size=(num_samples, 2), device=device
         )
         prompts = convert_labels_to_prompts(classes)
         context["text_prompts"] = prompts
@@ -317,10 +334,9 @@ def sample(
             )
 
             # Save the samples into an image grid
-            utils.save_image(
+            video_tensor_to_gif(
                 samples,
-                str(f"{OUTPUT_NAME}/sample-{step}-cfg-{guidance}.png"),
-                nrow=int(math.sqrt(num_samples)),
+                str(f"{OUTPUT_NAME}/sample-{step}-cfg-{guidance}.gif"),
             )
 
             # Save the intermedidate stages if they exist
@@ -328,33 +344,61 @@ def sample(
                 for layer_idx, intermediate_output in enumerate(
                     intermediate_stage_output
                 ):
-                    utils.save_image(
+                    video_tensor_to_gif(
                         intermediate_output,
                         str(
-                            f"{OUTPUT_NAME}/sample-{step}-cfg-{guidance}-stage-{layer_idx}.png"
+                            f"{OUTPUT_NAME}/sample-{step}-cfg-{guidance}-stage-{layer_idx}.gif"
                         ),
-                        nrow=int(math.sqrt(num_samples)),
                     )
 
     else:
+        # Add the flexible diffusion modeling context
+        B, C, F, H, W = (
+            num_samples,
+            config.data.num_channels,
+            config.data.input_number_of_frames,
+            config.data.image_size,
+            config.data.image_size,
+        )
+
+        context["x0"] = normalize_to_neg_one_to_one(
+            torch.zeros(size=(B, C, F, H, W), dtype=torch.float32, device=device)
+        )
+        context["frame_indices"] = torch.tile(
+            torch.arange(end=F, device=device)[None, ...],
+            (B, 1),
+        )
+        context["observed_mask"] = torch.zeros(
+            size=(B, C, F, 1, 1), dtype=torch.float32, device=device
+        )
+        context["latent_mask"] = torch.ones(
+            size=(B, C, F, 1, 1), dtype=torch.float32, device=device
+        )
+        context["video_mask"] = torch.ones(size=(B, F), dtype=torch.bool, device=device)
+
         samples, intermediate_stage_output = diffusion_model.sample(
             num_samples=num_samples, context=context
         )
 
-        # Save the samples into an image grid
-        utils.save_image(
-            samples,
+        # Save the first frame
+        torchvision_utils.save_image(
+            samples[:, :, 0, :, :],
             str(f"{OUTPUT_NAME}/sample-{step}.png"),
             nrow=int(math.sqrt(num_samples)),
+        )
+
+        # Save the samples into an image grid
+        video_tensor_to_gif(
+            samples,
+            str(f"{OUTPUT_NAME}/sample-{step}.gif"),
         )
 
         # Save the intermedidate stages if they exist
         if intermediate_stage_output is not None:
             for layer_idx, intermediate_output in enumerate(intermediate_stage_output):
-                utils.save_image(
+                video_tensor_to_gif(
                     intermediate_output,
-                    str(f"{OUTPUT_NAME}/sample-{step}-stage-{layer_idx}.png"),
-                    nrow=int(math.sqrt(num_samples)),
+                    str(f"{OUTPUT_NAME}/sample-{step}-stage-{layer_idx}.gif"),
                 )
 
     # Save the prompts that were used
@@ -364,13 +408,52 @@ def sample(
                 fp.write("\n")
             fp.write(f"{context['text_prompts'][i]} ")
 
-    # Save the low-resolution imagery if it was used.
-    if "super_resolution" in config:
-        utils.save_image(
-            context[config.super_resolution.conditioning_key],
-            str(f"{OUTPUT_NAME}/low_resolution_context-{step}.png"),
-            nrow=int(math.sqrt(num_samples)),
+
+def _add_low_resolution_context(context, config, training_videos, source_videos):
+    # First create the low resolution context.
+    if config.super_resolution.is_spatial:
+        low_resolution_spatial_size = config.super_resolution.low_resolution_size
+        low_resolution_videos = v2.functional.resize(
+            training_videos,
+            size=(
+                low_resolution_spatial_size,
+                low_resolution_spatial_size,
+            ),
+            antialias=True,
         )
+        context[config.super_resolution.conditioning_key] = low_resolution_videos
+    elif config.super_resolution.is_temporal:
+        # Make sure the source videos are the same spatial size as the training videos
+        # and model input.
+        B, C, F, H, W = source_videos.shape
+        if H != config.data.image_size and W != config.data.image_size:
+            source_videos = v2.functional.resize(
+                source_videos,
+                size=(
+                    config.data.image_size,
+                    config.data.image_size,
+                ),
+                antialias=True,
+            )
+
+        # Generate the low-resolution temporal videos, making sure to
+        # match the frame interpolation here with the frame sampling from
+        # the training data.
+        frameskip_method = config.super_resolution.low_resolution_sampling_scheme
+        assert frameskip_method.startswith("frameskip")
+        frameskip = int(frameskip_method.split("_")[1])
+        frame_indices = list(
+            range(
+                0,
+                frameskip * config.super_resolution.low_resolution_size,
+                frameskip,
+            )
+        )
+        low_resolution_videos = source_videos[:, :, frame_indices, :, :]
+        context[config.super_resolution.conditioning_key] = low_resolution_videos
+    else:
+        raise NotImplementedError("Super resolution layer is not spatial or temporal!")
+    return context
 
 
 def save(
@@ -420,7 +503,7 @@ def convert_labels_to_prompts(labels: torch.Tensor) -> List[str]:
 
     # First convert the labels into a list of string prompts
     prompts = [
-        text_labels[labels[i]][torch.randint(0, len(text_labels[labels[i]]), size=())]
+        f"{text_labels[labels[i][0]][torch.randint(0, len(text_labels[labels[i][0]]), size=())]} and {text_labels[labels[i][1]][torch.randint(0, len(text_labels[labels[i][1]]), size=())]}"
         for i in range(labels.shape[0])
     ]
     return prompts
@@ -431,21 +514,21 @@ def main(override=None):
     Main entrypoint for the standalone version of this package.
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument("--num_training_steps", type=int, default=10000)
-    parser.add_argument("--batch_size", type=int, default=128)
+    parser.add_argument("--num_training_steps", type=int, default=100000)
+    parser.add_argument("--batch_size", type=int, default=8)
     parser.add_argument("--config_path", type=str, required=True)
-    parser.add_argument("--sample_with_guidance", action="store_true")
-    parser.add_argument("--save_and_sample_every_n", type=int, default=100)
+    parser.add_argument("--save_and_sample_every_n", type=int, default=10000)
     parser.add_argument("--load_model_weights_from_checkpoint", type=str, default="")
+    parser.add_argument("--resume_from", type=str, default="")
     args = parser.parse_args()
 
     train(
         num_training_steps=args.num_training_steps,
         batch_size=args.batch_size,
         config_path=args.config_path,
-        sample_with_guidance=args.sample_with_guidance,
         save_and_sample_every_n=args.save_and_sample_every_n,
         load_model_weights_from_checkpoint=args.load_model_weights_from_checkpoint,
+        resume_from=args.resume_from,
     )
 
 

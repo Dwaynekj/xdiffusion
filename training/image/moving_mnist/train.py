@@ -1,3 +1,8 @@
+"""Trains an image diffusion model from the MovingMNIST dataset.
+
+Each video frame in the MovingMNIST dataset is treated as a single frame.
+"""
+
 from accelerate import Accelerator, DataLoaderConfiguration
 import argparse
 import math
@@ -7,17 +12,18 @@ import torch
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torchinfo import summary
-from torchvision import transforms, utils
-from torchvision.datasets import MNIST
+from torchvision import utils
 from tqdm import tqdm
 from typing import List
+from torchvision.transforms import v2
 
 from xdiffusion.utils import cycle, load_yaml, DotConfig
 from xdiffusion.ddpm import GaussianDiffusion_DDPM
 from xdiffusion.diffusion import DiffusionModel
 from xdiffusion.cascade import GaussianDiffusionCascade
+from xdiffusion.datasets.moving_mnist import MovingMNISTImage
 
-OUTPUT_NAME = "output/image/mnist"
+OUTPUT_NAME = "output/image/moving_mnist"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
@@ -28,6 +34,7 @@ def train(
     sample_with_guidance: bool,
     save_and_sample_every_n: int,
     load_model_weights_from_checkpoint: str,
+    resume_from_checkpoint: str,
 ):
     global OUTPUT_NAME
     OUTPUT_NAME = f"{OUTPUT_NAME}/{str(Path(config_path).stem)}"
@@ -41,40 +48,38 @@ def train(
     # Load the MNIST dataset. This is a supervised dataset so
     # it contains both images and class labels. We will ignore the class
     # labels for now.
-    dataset = MNIST(
+    dataset = MovingMNISTImage(
         ".",
         train=True,
-        transform=transforms.Compose(
+        transform=v2.Compose(
             [
-                # To make the math work out easier, resize the MNIST
-                # images from (28,28) to (32, 32).
-                transforms.Resize(
-                    size=(config.data.image_size, config.data.image_size)
+                # To the memory requirements, resize the MNIST
+                # images from (64,64) to (32, 32).
+                v2.Resize(
+                    size=(config.data.image_size, config.data.image_size),
+                    antialias=True,
                 ),
-                # Conversion to tensor scales the data from (0,255)
-                # to (0,1).
-                transforms.ToTensor(),
+                # Convert the motion images to (0,1) float range
+                v2.ToDtype(torch.float32, scale=True),
             ]
         ),
-        download=True,
     )
 
-    validation_dataset = MNIST(
+    validation_dataset = MovingMNISTImage(
         ".",
         train=False,
-        transform=transforms.Compose(
+        transform=v2.Compose(
             [
-                # To make the math work out easier, resize the MNIST
-                # images from (28,28) to (32, 32).
-                transforms.Resize(
-                    size=(config.data.image_size, config.data.image_size)
+                # To the memory requirements, resize the MNIST
+                # images from (64,64) to (32, 32).
+                v2.Resize(
+                    size=(config.data.image_size, config.data.image_size),
+                    antialias=True,
                 ),
-                # Conversion to tensor scales the data from (0,255)
-                # to (0,1).
-                transforms.ToTensor(),
+                # Convert the motion images to (0,1) float range
+                v2.ToDtype(torch.float32, scale=True),
             ]
         ),
-        download=True,
     )
 
     # Create the dataloader for the MNIST dataset
@@ -95,6 +100,9 @@ def train(
     # Load the model weights if we have them
     if load_model_weights_from_checkpoint:
         diffusion_model.load_checkpoint(load_model_weights_from_checkpoint)
+
+    if resume_from_checkpoint:
+        diffusion_model.load_checkpoint(resume_from_checkpoint)
 
     # Build context to display the model summary.
     diffusion_model.print_model_summary()
@@ -122,6 +130,13 @@ def train(
     #  rate to 2 × 10−4 without any sweeping, and we lowered it to 2 × 10−5
     #  for the 256 × 256 images, which seemed unstable to train with the larger learning rate."
     optimizers = diffusion_model.configure_optimizers(learning_rate=2e-4)
+
+    # Load the optimizers if we have them from the checkpoint
+    if resume_from_checkpoint:
+        checkpoint = torch.load(resume_from_checkpoint, map_location="cpu")
+        num_optimizers = checkpoint["num_optimizers"]
+        for i in range(num_optimizers):
+            optimizers[i].load_state_dict(checkpoint["optimizer_state_dicts"][i])
 
     # Move the model and the optimizer to the accelerator as well.
     diffusion_model = accelerator.prepare(diffusion_model)
@@ -174,7 +189,7 @@ def train(
                     low_resolution_spatial_size = (
                         config_for_layer.super_resolution.low_resolution_spatial_size
                     )
-                    low_resolution_images = transforms.functional.resize(
+                    low_resolution_images = v2.functional.resize(
                         images,
                         size=(
                             low_resolution_spatial_size,
@@ -193,7 +208,7 @@ def train(
 
                 B, C, H, W = images.shape
                 if H != model_input_spatial_size or W != model_input_spatial_size:
-                    images_for_layer = transforms.functional.resize(
+                    images_for_layer = v2.functional.resize(
                         images,
                         size=(
                             model_input_spatial_size,
@@ -290,7 +305,7 @@ def sample(
         low_resolution_spatial_size = (
             config.super_resolution.low_resolution_spatial_size
         )
-        low_resolution_images = transforms.functional.resize(
+        low_resolution_images = v2.functional.resize(
             images,
             size=(
                 low_resolution_spatial_size,
@@ -302,7 +317,7 @@ def sample(
     else:
         # Sample from the model to check the quality.
         classes = torch.randint(
-            0, config.data.num_classes, size=(num_samples,), device=device
+            0, config.data.num_classes, size=(num_samples, 2), device=device
         )
         prompts = convert_labels_to_prompts(classes)
         context["text_prompts"] = prompts
@@ -420,7 +435,7 @@ def convert_labels_to_prompts(labels: torch.Tensor) -> List[str]:
 
     # First convert the labels into a list of string prompts
     prompts = [
-        text_labels[labels[i]][torch.randint(0, len(text_labels[labels[i]]), size=())]
+        f"{text_labels[labels[i][0]][torch.randint(0, len(text_labels[labels[i][0]]), size=())]} and {text_labels[labels[i][1]][torch.randint(0, len(text_labels[labels[i][1]]), size=())]}"
         for i in range(labels.shape[0])
     ]
     return prompts
@@ -437,6 +452,8 @@ def main(override=None):
     parser.add_argument("--sample_with_guidance", action="store_true")
     parser.add_argument("--save_and_sample_every_n", type=int, default=100)
     parser.add_argument("--load_model_weights_from_checkpoint", type=str, default="")
+    parser.add_argument("--resume_from_checkpoint", type=str, default="")
+
     args = parser.parse_args()
 
     train(
@@ -446,6 +463,7 @@ def main(override=None):
         sample_with_guidance=args.sample_with_guidance,
         save_and_sample_every_n=args.save_and_sample_every_n,
         load_model_weights_from_checkpoint=args.load_model_weights_from_checkpoint,
+        resume_from_checkpoint=args.resume_from_checkpoint,
     )
 
 
