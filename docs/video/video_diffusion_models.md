@@ -24,7 +24,7 @@ First, ensure that all of the requirements are installed following the instructi
 To train the model, run the following from the root of the repository:
 
 ```
-> python training/moving_mnist/train.py --config_path configs/moving_mnist/video_diffusion_models.yaml --num_training_steps 100000 --batch_size 8 --save_and_sample_every_n 10000
+> python training/video/moving_mnist/train.py --config_path configs/video/moving_mnist/video_diffusion_models.yaml --num_training_steps 100000 --batch_size 8 --save_and_sample_every_n 10000
 ```
 
 We successfully tested training on a single T4 instance (16GB VRAM) using a batch size of 8.
