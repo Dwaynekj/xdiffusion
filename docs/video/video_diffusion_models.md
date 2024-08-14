@@ -15,11 +15,11 @@ In order to accomplish this, the authors factorized the spatial 2D UNet in the s
 
 ## Configuration File
 
-The configuration file is located in [Video Diffusion Models](https://github.com/swookey-thinky/video_diffusion/blob/main/configs/moving_mnist/video_diffusion_models.yaml).
+The configuration file is located in [Video Diffusion Models](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/video/moving_mnist/video_diffusion_models.yaml).
 
 ## Training
 
-First, ensure that all of the requirements are installed following the instructions [here](https://github.com/swookey-thinky/video_diffusion?tab=readme-ov-file#requirements).
+First, ensure that all of the requirements are installed following the instructions [here](https://github.com/swookey-thinky/xdiffusion?tab=readme-ov-file#requirements).
 
 To train the model, run the following from the root of the repository:
 
@@ -34,18 +34,18 @@ We successfully tested training on a single T4 instance (16GB VRAM) using a batc
 To unconditionally sample from a pretrained checkpoint, you can run:
 
 ```
-> python training/moving_mnist/sample.py --config_path configs/moving_mnist/video_diffusion_models.yaml --num_samples 16 --checkpoint output/moving_mnist/video_diffusion_models/diffusion-100000.pt
+> python training/video/moving_mnist/sample.py --config_path configs/video/moving_mnist/video_diffusion_models.yaml --num_samples 16 --checkpoint output/video/moving_mnist/video_diffusion_models/diffusion-100000.pt
 ```
 
 Output will be saved to the `output/moving_mnist/sample/video_diffusion_models` directory.
 
 ## Results and Checkpoints
 
-The following results were generated using this [commit hash](https://github.com/swookey-thinky/video_diffusion/commit/fb739d9314a6bce1665d27e4f110c239183df288), after training on a single T4 instance for 100k steps at batch size 8:
+The following results were generated after training on a single T4 instance for 100k steps at batch size 8:
 
 | Config | Checkpoint | Results
 | ------ | ---------- | -------
-| [config](https://github.com/swookey-thinky/video_diffusion/blob/main/configs/moving_mnist/video_diffusion_models.yaml) | [google drive](https://drive.google.com/file/d/1gAMyfBjr47sscPGNlzsxAHJegHv-dLrc/view?usp=sharing) | ![Video Diffusion Models](https://drive.google.com/uc?export=view&id=1aYxiwkgdAd6oFpXMwQhDwfiXXYJlDDFG)
+| [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/video/moving_mnist/video_diffusion_models.yaml) | [google drive](https://drive.google.com/file/d/1gAMyfBjr47sscPGNlzsxAHJegHv-dLrc/view?usp=sharing) | ![Video Diffusion Models](https://drive.google.com/uc?export=view&id=1aYxiwkgdAd6oFpXMwQhDwfiXXYJlDDFG)
 
 ## Other Resources
 
