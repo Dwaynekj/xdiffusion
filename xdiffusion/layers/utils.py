@@ -1,7 +1,9 @@
 from abc import abstractmethod
 import collections.abc
+from einops import rearrange
 from enum import Enum
 from itertools import repeat
+import math
 import numpy as np
 import torch
 
@@ -17,10 +19,42 @@ def conv_nd(dims, *args, **kwargs):
     raise ValueError(f"unsupported dimensions: {dims}")
 
 
+def pseudo_conv_nd(dims, *args, **kwargs):
+    """2D convolution followed by a 1D temporal convolution.
+
+    Input is (B, C, F, H, W).
+    """
+    if dims == 3:
+        return torch.nn.Sequential(
+            # 2D convolution over spatial layers
+            EinopsToAndFrom(
+                from_einops="b c f h w",
+                to_einops="(b f) c h w",
+                fn=torch.nn.Conv2d(*args, **kwargs),
+            ),
+            # 1D convolution over temporal dimension
+            EinopsToAndFrom(
+                from_einops="b c f h w",
+                to_einops="(b h w) c f",
+                fn=dirac_module(torch.nn.Conv1d(*args, **kwargs)),
+            ),
+        )
+    else:
+        return conv_nd(dims, args, kwargs)
+
+
 def zero_module(module):
     """Zero out the parameters of a module and return it."""
     for p in module.parameters():
         p.detach().zero_()
+    return module
+
+
+def dirac_module(module):
+    """Dirac the parameters of a module and return it."""
+    assert isinstance(module, torch.nn.Conv1d)
+    torch.nn.init.dirac_(module.weight.data)  # initialized to be identity
+    torch.nn.init.zeros_(module.bias.data)
     return module
 
 
@@ -33,6 +67,51 @@ def avg_pool_nd(dims, *args, **kwargs):
     elif dims == 3:
         return torch.nn.AvgPool3d(*args, **kwargs)
     raise ValueError(f"unsupported dimensions: {dims}")
+
+
+def linear(*args, **kwargs):
+    """
+    Create a linear module.
+    """
+    return torch.nn.Linear(*args, **kwargs)
+
+
+def normalization(channels):
+    """
+    Make a standard normalization layer.
+
+    :param channels: number of input channels.
+    :return: an nn.Module for normalization.
+    """
+    return GroupNorm32(32, channels)
+
+
+def timestep_embedding(timesteps, dim, max_period=10000):
+    """
+    Create sinusoidal timestep embeddings.
+
+    :param timesteps: a 1-D Tensor of N indices, one per batch element.
+                      These may be fractional.
+    :param dim: the dimension of the output.
+    :param max_period: controls the minimum frequency of the embeddings.
+    :return: an [N x dim] Tensor of positional embeddings.
+    """
+    half = dim // 2
+    freqs = torch.exp(
+        -math.log(max_period)
+        * torch.arange(start=0, end=half, dtype=torch.float32)
+        / half
+    ).to(device=timesteps.device)
+    args = timesteps[:, None].float() * freqs[None]
+    embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+    if dim % 2:
+        embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
+    return embedding
+
+
+class GroupNorm32(torch.nn.GroupNorm):
+    def forward(self, x):
+        return super().forward(x.float()).type(x.dtype)
 
 
 class ContextBlock(torch.nn.Module):
@@ -140,3 +219,68 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
 
     emb = np.concatenate([emb_sin, emb_cos], axis=1)  # (M, D)
     return emb
+
+
+class EinopsToAndFrom(ContextBlock):
+    def __init__(self, from_einops, to_einops, fn):
+        super().__init__()
+        self.from_einops = from_einops
+        self.to_einops = to_einops
+        self.fn = fn
+
+    def forward(self, x, **kwargs):
+        shape = x.shape
+        reconstitute_kwargs = dict(tuple(zip(self.from_einops.split(" "), shape)))
+        x = rearrange(x, f"{self.from_einops} -> {self.to_einops}")
+        x = self.fn(x, **kwargs)
+        x = rearrange(
+            x, f"{self.to_einops} -> {self.from_einops}", **reconstitute_kwargs
+        )
+        return x
+
+
+class TemporalConvolution(torch.nn.Conv1d):
+    def __init__(self, in_channels: int, **kwargs):
+        super().__init__(in_channels=in_channels, out_channels=in_channels, **kwargs)
+
+    def forward(self, x, **kwargs):
+        return super().forward(x)
+
+
+class DropPath(torch.nn.Module):
+    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks)."""
+
+    def __init__(self, drop_prob: float = 0.0, scale_by_keep: bool = True):
+        super(DropPath, self).__init__()
+        self.drop_prob = drop_prob
+        self.scale_by_keep = scale_by_keep
+
+    def forward(self, x):
+        return drop_path(x, self.drop_prob, self.training, self.scale_by_keep)
+
+    def extra_repr(self):
+        return f"drop_prob={round(self.drop_prob,3):0.3f}"
+
+
+def drop_path(
+    x, drop_prob: float = 0.0, training: bool = False, scale_by_keep: bool = True
+):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+
+    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
+    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for
+    changing the layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use
+    'survival rate' as the argument.
+
+    """
+    if drop_prob == 0.0 or not training:
+        return x
+    keep_prob = 1 - drop_prob
+    shape = (x.shape[0],) + (1,) * (
+        x.ndim - 1
+    )  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = x.new_empty(shape).bernoulli_(keep_prob)
+    if keep_prob > 0.0 and scale_by_keep:
+        random_tensor.div_(keep_prob)
+    return x * random_tensor

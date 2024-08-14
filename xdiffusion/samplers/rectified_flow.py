@@ -1,13 +1,11 @@
 """Rectified Flow ancestral sampler"""
 
-"""Ancestral sampling, from DDPM."""
 import numpy as np
 import torch
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
-from xdiffusion.diffusion import PredictionType, DiffusionModel
+from xdiffusion.diffusion import DiffusionModel
 from xdiffusion.samplers.base import ReverseProcessSampler
-from xdiffusion.utils import dynamic_thresholding
 
 
 class AncestralSampler(ReverseProcessSampler):
@@ -71,8 +69,9 @@ class AncestralSampler(ReverseProcessSampler):
         # SDE is given by:
         # dx = [f(x, t) - g(t)**2 * grad_x(log(p_t(x)))]dt + g(t)*dW
         # with f(x,t) = v_θ and g(t) = sigma(t)
-        # TODO: I still don't understand where all of the parameters come from in the
-        #       below calculation.
+        #
+        # For the rectified flow sampler, sigma_t ends up being 0, and
+        # since pred is just the predicted velocity, this becomes x -> x + pred * dt.
         pred_sigma = pred + (sigma_t**2) / (
             2 * (sde.noise_scale() ** 2) * ((1.0 - num_t) ** 2)
         ) * (0.5 * num_t * (1.0 - num_t) * pred - 0.5 * (2.0 - num_t) * x)

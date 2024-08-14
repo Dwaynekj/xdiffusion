@@ -15,19 +15,14 @@ This package augments the GLIDE text conditioning with the text and image condit
 from DaLL*E 2.
 """
 
-from einops.layers.torch import Rearrange
 import torch
-from typing import Any, Dict, List, Optional, Union
+from typing import Dict, List, Union
 
-from xdiffusion.layers.embedding import ContextEmbedSequential
 from xdiffusion.layers.resnet import (
-    Downsample,
     ResnetBlockEfficient,
-    Upsample,
     UBlock,
     DBlock,
 )
-from xdiffusion.layers.transformer import LayerNorm, Transformer
 from xdiffusion.utils import (
     DotConfig,
     instantiate_from_config,

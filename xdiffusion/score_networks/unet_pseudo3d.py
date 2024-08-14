@@ -1,29 +1,21 @@
-"""Defines the noise prediction U-Net.
+"""Noise prediction UNet using Pseudo-3D convolutions and attentions.
 
-U-Net espilon prediction network from the paper "Denoising Diffusion Probabilistic Models"
-(https://arxiv.org/abs/2006.11239).
-
-This package has the following improvements over the original implementation:
-
-This package adds the score network improvements from GLIDE. Namely, the model is trained
-with classifier free guidance, and it uses a text conditioning scheme very similar to
-Latent Diffusion. The difference is that Latent Diffusion uses a transformer+cross attention
-projection at each UNet layer, while GLIDE uses a single transformer block, and only cross attention
-at each layer.
-
-This package augments the GLIDE text conditioning with the text and image conditioning
-from DaLL*E 2.
+The score network implements the Pseudo3D convolutional and attention network
+from Make-A-Video (https://arxiv.org/abs/2209.14792).
 """
 
+from einops import rearrange
+import numpy as np
 import torch
 from typing import Any, Dict, List, Union
 
 from xdiffusion.layers.embedding import ContextEmbedSequential
 from xdiffusion.layers.resnet import (
     Downsample,
-    ResnetBlockDDPM,
-    ResnetBlockBigGAN,
     Upsample,
+)
+from xdiffusion.layers.resnet_3d import (
+    ResnetBlockBigGANPseudo3D,
 )
 from xdiffusion.utils import (
     DotConfig,
@@ -112,15 +104,21 @@ class Unet(torch.nn.Module):
             padding=1,
             bias=False,
         )
-
-        ResnetBlock = (
-            ResnetBlockBigGAN
-            if config.resnet_block_type == "biggan"
-            else ResnetBlockDDPM
+        self._initial_temporal_convolution = torch.nn.Conv1d(
+            in_channels=channels[0],
+            out_channels=channels[0],
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            bias=False,
         )
+        torch.nn.init.dirac_(self._initial_temporal_convolution.weight.data)
+
+        assert config.resnet_block_type == "biggan"
+        ResnetBlock = ResnetBlockBigGANPseudo3D
 
         attention_ds = []
-        for res in config.attention.attention_resolutions:
+        for res in config.attention_resolutions:
             attention_ds.append(config.input_spatial_size // int(res))
 
         # The number of resnet blocks in each layer.
@@ -150,7 +148,7 @@ class Unet(torch.nn.Module):
                 if ds in attention_ds:
                     layers.append(
                         instantiate_partial_from_config(
-                            config.conditioning.context_transformer_layer.to_dict()
+                            config.conditioning.spatial_and_temporal_context_transformer_layer.to_dict()
                         )(in_channels=ch)
                     )
                 self.downs.append(ContextEmbedSequential(*layers))
@@ -171,7 +169,7 @@ class Unet(torch.nn.Module):
                         else Downsample(
                             ch,
                             config.resamp_with_conv,
-                            dims=2,
+                            dims=3,
                         )
                     )
                 )
@@ -189,7 +187,7 @@ class Unet(torch.nn.Module):
                 use_conv=config.resamp_with_conv,
             ),
             instantiate_partial_from_config(
-                config.conditioning.context_transformer_layer.to_dict()
+                config.conditioning.spatial_and_temporal_context_transformer_layer.to_dict()
             )(in_channels=ch),
             ResnetBlock(
                 dim_in=ch,
@@ -218,7 +216,7 @@ class Unet(torch.nn.Module):
                 if ds in attention_ds:
                     layers.append(
                         instantiate_partial_from_config(
-                            config.conditioning.context_transformer_layer.to_dict()
+                            config.conditioning.spatial_and_temporal_context_transformer_layer.to_dict()
                         )(in_channels=ch)
                     )
                 if level and i == num_resnet_blocks[level]:
@@ -233,7 +231,7 @@ class Unet(torch.nn.Module):
                             up=True,
                         )
                         if config.resblock_updown
-                        else Upsample(ch, config.resamp_with_conv, dims=2)
+                        else Upsample(ch, config.resamp_with_conv, dims=3)
                     )
                     ds //= 2
                 self.ups.append(ContextEmbedSequential(*layers))
@@ -251,6 +249,14 @@ class Unet(torch.nn.Module):
                 bias=False,
             ),
         )
+        self.final_projection_temporal = torch.nn.Conv1d(
+            in_channels=self._output_channels,
+            out_channels=self._output_channels,
+            kernel_size=1,
+            stride=1,
+            bias=False,
+        )
+        torch.nn.init.dirac_(self.final_projection_temporal.weight.data)
 
         # Run any special initializers
         def _custom_init(module):
@@ -277,8 +283,22 @@ class Unet(torch.nn.Module):
         for context_transformer in self._context_transformers:
             context = context_transformer(context, device=x.device)
 
-        # Initial convolution
-        h = self._initial_convolution(x)
+        # Initial convolution, convert to spatial
+        B, C, F, H, W = x.shape
+        x_spatial = rearrange(x, "b c f h w -> (b f) c h w")
+        h = self._initial_convolution(x_spatial)
+
+        # Now the temporal convolution
+        h = rearrange(h, "(b f) c h w -> (b h w) c f", b=B, f=F)
+        h = self._initial_temporal_convolution(h)
+        h = rearrange(
+            h,
+            "(b h w) c f -> b c f h w",
+            b=B,
+            f=F,
+            h=int(np.sqrt((h.shape[0] // B))),
+            w=int(np.sqrt((h.shape[0] // B))),
+        )
 
         hs = [h]
         for module in self.downs:
@@ -289,7 +309,20 @@ class Unet(torch.nn.Module):
             cat_in = torch.cat([h, hs.pop()], dim=1)
             h = module(cat_in, context=context)
 
+        # Final convolution, decomposed
+        h = rearrange(h, "b c f h w -> (b f) c h w")
         h = self.final_projection(h)
+
+        h = rearrange(h, "(b f) c h w -> (b h w) c f", b=B, f=F)
+        h = self.final_projection_temporal(h)
+        h = rearrange(
+            h,
+            "(b h w) c f -> b c f h w",
+            b=B,
+            f=F,
+            h=int(np.sqrt((h.shape[0] // B))),
+            w=int(np.sqrt((h.shape[0] // B))),
+        )
 
         if self._is_learned_sigma:
             return torch.split(h, self._output_channels // 2, dim=1)

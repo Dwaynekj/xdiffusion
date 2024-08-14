@@ -1,11 +1,13 @@
 """Utility functions for working with the lesson."""
 
+from einops import rearrange
 from functools import partial
 import importlib
 import math
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
+from torchvision.transforms import v2
 from typing import Any, Dict, Type, TypeVar
 import yaml
 
@@ -49,7 +51,7 @@ def normalize_to_neg_one_to_one(img):
 
 def unnormalize_to_zero_to_one(t):
     """Converts tensors from (-1,1) to (0,1)."""
-    return (t + 1) * 0.5
+    return (torch.clamp(t, -1.0, 1.0) + 1) * 0.5
 
 
 def extract(a, t, x_shape):
@@ -348,3 +350,21 @@ def dynamic_thresholding(x, p=0.995, c=1.7):
     x_compressed = torch.clip(x.reshape(x_shapes[0], -1).T, -s, s) / s
     x_compressed = x_compressed.T.reshape(x_shapes)
     return x_compressed
+
+
+def video_tensor_to_gif(tensor, path, duration=120, loop=0, optimize=True):
+    # Convert the tensor of (B, C, F, H, W) to a grid of (C, F, H*sqrt(B), W*sqrt(b))
+    images_grid = rearrange(
+        tensor, "(i j) c f h w -> c f (i h) (j w)", i=int(math.sqrt(tensor.shape[0]))
+    )
+    images = map(v2.ToPILImage(), images_grid.unbind(dim=1))
+    first_img, *rest_imgs = images
+    first_img.save(
+        path,
+        save_all=True,
+        append_images=rest_imgs,
+        duration=duration,
+        loop=loop,
+        optimize=optimize,
+    )
+    return images

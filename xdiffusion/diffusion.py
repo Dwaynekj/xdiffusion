@@ -30,6 +30,7 @@ class DiffusionModel(torch.nn.Module):
         guidance_fn: Optional[Callable] = None,
         classifier_free_guidance: Optional[float] = None,
         sampler: Optional[ReverseProcessSampler] = None,
+        initial_noise: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[List[torch.Tensor]]]:
         pass
 

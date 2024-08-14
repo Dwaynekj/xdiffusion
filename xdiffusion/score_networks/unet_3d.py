@@ -1,18 +1,7 @@
-"""Defines the noise prediction U-Net.
+"""Defines a 3D Unet for spatio-temporal noise prediction.
 
-U-Net espilon prediction network from the paper "Denoising Diffusion Probabilistic Models"
-(https://arxiv.org/abs/2006.11239).
-
-This package has the following improvements over the original implementation:
-
-This package adds the score network improvements from GLIDE. Namely, the model is trained
-with classifier free guidance, and it uses a text conditioning scheme very similar to
-Latent Diffusion. The difference is that Latent Diffusion uses a transformer+cross attention
-projection at each UNet layer, while GLIDE uses a single transformer block, and only cross attention
-at each layer.
-
-This package augments the GLIDE text conditioning with the text and image conditioning
-from DaLL*E 2.
+This package implements the 3D UNet from "Video Diffusion Models"
+(https://arxiv.org/abs/2204.03458).
 """
 
 import torch
@@ -21,10 +10,13 @@ from typing import Any, Dict, List, Union
 from xdiffusion.layers.embedding import ContextEmbedSequential
 from xdiffusion.layers.resnet import (
     Downsample,
-    ResnetBlockDDPM,
-    ResnetBlockBigGAN,
     Upsample,
 )
+from xdiffusion.layers.resnet_3d import (
+    ResnetBlockDDPM3D,
+    ResnetBlockBigGAN3D,
+)
+from xdiffusion.layers.utils import EinopsToAndFrom
 from xdiffusion.utils import (
     DotConfig,
     instantiate_from_config,
@@ -33,7 +25,7 @@ from xdiffusion.utils import (
 
 
 class Unet(torch.nn.Module):
-    """A time-dependent score-based model built upon U-Net architecture."""
+    """A 3D time-dependent score-based model built upon U-Net architecture."""
 
     def __init__(
         self,
@@ -95,32 +87,25 @@ class Unet(torch.nn.Module):
                 ]
             )
 
-        self._label_projection = torch.nn.Identity()
-        if self._is_class_conditional:
-            # We add 1 to the number of classes so that we can embed
-            # a NULL token.
-            self._label_projection = torch.nn.Embedding(
-                self._num_classes + 1, time_emb_dim
-            )
-
-        # Original paper implementation had kernel size = 3, stride = 1
-        self._initial_convolution = torch.nn.Conv2d(
+        # Original paper implementation had kernel size = 3, stride = 1.
+        # Updated to a 3D convolution, of shape (B, C, F, H, W)
+        self._initial_convolution = torch.nn.Conv3d(
             in_channels=input_channels,
             out_channels=channels[0],
-            kernel_size=3,
-            stride=1,
-            padding=1,
+            kernel_size=(1, 3, 3),
+            stride=(1, 1, 1),
+            padding=(0, 1, 1),
             bias=False,
         )
 
         ResnetBlock = (
-            ResnetBlockBigGAN
+            ResnetBlockBigGAN3D
             if config.resnet_block_type == "biggan"
-            else ResnetBlockDDPM
+            else ResnetBlockDDPM3D
         )
 
         attention_ds = []
-        for res in config.attention.attention_resolutions:
+        for res in config.attention_resolutions:
             attention_ds.append(config.input_spatial_size // int(res))
 
         # The number of resnet blocks in each layer.
@@ -144,14 +129,39 @@ class Unet(torch.nn.Module):
                         dim_out=mult * num_features,
                         use_scale_shift_norm=config.use_scale_shift_norm,
                         use_conv=config.resamp_with_conv,
+                        mlp_layers=config.mlp_layers,
                     )
                 ]
                 ch = mult * num_features
                 if ds in attention_ds:
+                    # The spatial attention layer needs to attend over the
+                    # spatial dimensions, and expects an input of shape (B, L, D),
+                    # where D will be the input channels 'ch'
                     layers.append(
-                        instantiate_partial_from_config(
-                            config.conditioning.context_transformer_layer.to_dict()
-                        )(in_channels=ch)
+                        EinopsToAndFrom(
+                            from_einops="b c f h w",
+                            to_einops="(b f) c h w",
+                            fn=instantiate_partial_from_config(
+                                config.conditioning.spatial_context_transformer_layer.to_dict()
+                            )(
+                                in_channels=ch,
+                                context_projection_output_dim=(
+                                    config.input_spatial_size // ds
+                                )
+                                ** 2,
+                            ),
+                        )
+                    )
+                    # The temporal attention needs to attend to the frames
+                    # only.
+                    layers.append(
+                        EinopsToAndFrom(
+                            from_einops="b c f h w",
+                            to_einops="(b h w) c f",
+                            fn=instantiate_partial_from_config(
+                                config.conditioning.temporal_context_transformer_layer.to_dict()
+                            )(in_channels=ch),
+                        )
                     )
                 self.downs.append(ContextEmbedSequential(*layers))
                 input_block_chans.append(ch)
@@ -166,12 +176,13 @@ class Unet(torch.nn.Module):
                             use_scale_shift_norm=config.use_scale_shift_norm,
                             use_conv=config.resamp_with_conv,
                             down=True,
+                            mlp_layers=config.mlp_layers,
                         )
                         if config.resblock_updown
                         else Downsample(
                             ch,
                             config.resamp_with_conv,
-                            dims=2,
+                            dims=3,
                         )
                     )
                 )
@@ -187,10 +198,26 @@ class Unet(torch.nn.Module):
                 dropout=dropout,
                 use_scale_shift_norm=config.use_scale_shift_norm,
                 use_conv=config.resamp_with_conv,
+                mlp_layers=config.mlp_layers,
             ),
-            instantiate_partial_from_config(
-                config.conditioning.context_transformer_layer.to_dict()
-            )(in_channels=ch),
+            EinopsToAndFrom(
+                from_einops="b c f h w",
+                to_einops="(b f) c h w ",
+                fn=instantiate_partial_from_config(
+                    config.conditioning.spatial_context_transformer_layer.to_dict()
+                )(
+                    in_channels=ch,
+                    context_projection_output_dim=(config.input_spatial_size // ds)
+                    ** 2,
+                ),
+            ),
+            EinopsToAndFrom(
+                from_einops="b c f h w",
+                to_einops="(b h w) c f",
+                fn=instantiate_partial_from_config(
+                    config.conditioning.temporal_context_transformer_layer.to_dict()
+                )(in_channels=ch),
+            ),
             ResnetBlock(
                 dim_in=ch,
                 dim_out=ch,
@@ -198,6 +225,7 @@ class Unet(torch.nn.Module):
                 dropout=dropout,
                 use_scale_shift_norm=config.use_scale_shift_norm,
                 use_conv=config.resamp_with_conv,
+                mlp_layers=config.mlp_layers,
             ),
         )
 
@@ -212,14 +240,39 @@ class Unet(torch.nn.Module):
                         dim_out=num_features * mult,
                         use_scale_shift_norm=config.use_scale_shift_norm,
                         use_conv=config.resamp_with_conv,
+                        mlp_layers=config.mlp_layers,
                     )
                 ]
                 ch = num_features * mult
                 if ds in attention_ds:
+                    # The spatial attention layer needs to attend over the
+                    # spatial dimensions, and expects an input of shape (B, L, D),
+                    # where D will be the input channels 'ch'
                     layers.append(
-                        instantiate_partial_from_config(
-                            config.conditioning.context_transformer_layer.to_dict()
-                        )(in_channels=ch)
+                        EinopsToAndFrom(
+                            from_einops="b c f h w",
+                            to_einops="(b f) c h w",
+                            fn=instantiate_partial_from_config(
+                                config.conditioning.spatial_context_transformer_layer.to_dict()
+                            )(
+                                in_channels=ch,
+                                context_projection_output_dim=(
+                                    config.input_spatial_size // ds
+                                )
+                                ** 2,
+                            ),
+                        )
+                    )
+                    # The temporal attention needs to attend to the frames
+                    # only.
+                    layers.append(
+                        EinopsToAndFrom(
+                            from_einops="b c f h w",
+                            to_einops="(b h w) c f",
+                            fn=instantiate_partial_from_config(
+                                config.conditioning.temporal_context_transformer_layer.to_dict()
+                            )(in_channels=ch),
+                        )
                     )
                 if level and i == num_resnet_blocks[level]:
                     layers.append(
@@ -231,9 +284,10 @@ class Unet(torch.nn.Module):
                             use_scale_shift_norm=config.use_scale_shift_norm,
                             use_conv=config.resamp_with_conv,
                             up=True,
+                            mlp_layers=config.mlp_layers,
                         )
                         if config.resblock_updown
-                        else Upsample(ch, config.resamp_with_conv, dims=2)
+                        else Upsample(ch, config.resamp_with_conv, dims=3)
                     )
                     ds //= 2
                 self.ups.append(ContextEmbedSequential(*layers))
@@ -242,12 +296,12 @@ class Unet(torch.nn.Module):
         self.final_projection = torch.nn.Sequential(
             torch.nn.GroupNorm(num_groups=32, num_channels=num_features),
             torch.nn.SiLU(),
-            torch.nn.Conv2d(
+            torch.nn.Conv3d(
                 in_channels=num_features,
                 out_channels=self._output_channels,
-                kernel_size=3,
-                stride=1,
-                padding=1,
+                kernel_size=(1, 3, 3),
+                stride=(1, 1, 1),
+                padding=(0, 1, 1),
                 bias=False,
             ),
         )
@@ -267,15 +321,18 @@ class Unet(torch.nn.Module):
         """Calculate noise parameter.
 
         Args:
-            x: Tensor batch of noisy input data.
-            t: Tensor batch of timestep indices.
-            y: (Optional) Tensor batch of integer class labels.
+            x: Tensor batch of noisy input data, shape (B, C, F, H, W)
+            context: Dictionary of context tensors
         """
-        # Transform the context at the top if we have it. This will generate
-        # an embedding to combine with the timestep projection, and the embedded
-        # context.
+        # Don't change the original context
+        context = context.copy()
+
+        # Add the input batch to the context
+        context["x"] = x
+
+        # Transform the context at the top if we have it.
         for context_transformer in self._context_transformers:
-            context = context_transformer(context, device=x.device)
+            context = context_transformer(context=context, device=x.device)
 
         # Initial convolution
         h = self._initial_convolution(x)

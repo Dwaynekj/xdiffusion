@@ -552,11 +552,19 @@ class CLIPTextEmbedder(torch.nn.Module):
 
 
 class T5TextEmbedder(torch.nn.Module):
-    def __init__(self, version: str, max_length: int, context_key: str, **hf_kwargs):
+    def __init__(
+        self,
+        version: str,
+        max_length: int,
+        context_key: str,
+        include_temporal: bool = False,
+        **hf_kwargs,
+    ):
         super().__init__()
         self.max_length = max_length
         self.output_key = "last_hidden_state"
         self.context_key = context_key
+        self.include_temporal = include_temporal
 
         self.tokenizer: T5Tokenizer = T5Tokenizer.from_pretrained(
             version, max_length=max_length
@@ -579,10 +587,21 @@ class T5TextEmbedder(torch.nn.Module):
             return_tensors="pt",
         )
 
-        outputs = self.hf_module(
-            input_ids=batch_encoding["input_ids"].to(self.hf_module.device),
-            attention_mask=None,
-            output_hidden_states=False,
-        )
-        context[self.context_key] = outputs[self.output_key].to(device)
+        input_ids = batch_encoding["input_ids"].to(self.hf_module.device)
+        attention_mask = batch_encoding["attention_mask"].to(self.hf_module.device)
+        with torch.no_grad():
+            outputs = self.hf_module(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                output_hidden_states=False,
+            )
+
+        outputs = outputs[self.output_key].to(device)
+
+        if self.include_temporal:
+            # Include the temporal dimension
+            outputs = outputs[:, None]
+
+        context[self.context_key] = outputs
+        context["text_attention_mask"] = attention_mask.to(device)
         return context

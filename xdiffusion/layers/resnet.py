@@ -453,8 +453,12 @@ class Downsample(torch.nn.Module):
         self.use_conv = use_conv
         self.dims = dims
         stride = 2 if dims != 3 else (1, 2, 2)
+        kernel_size = 3 if dims != 3 else (1, 3, 3)
+        padding = 1 if dims != 3 else (0, 1, 1)
         if use_conv:
-            self.op = conv_nd(dims, channels, channels, 3, stride=stride, padding=1)
+            self.op = conv_nd(
+                dims, channels, channels, kernel_size, stride=stride, padding=padding
+            )
         else:
             self.op = avg_pool_nd(dims, kernel_size=stride, stride=stride)
 
@@ -478,8 +482,12 @@ class Upsample(torch.nn.Module):
         self.channels = channels
         self.use_conv = use_conv
         self.dims = dims
+
+        kernel_size = 3 if dims != 3 else (1, 3, 3)
+        padding = 1 if dims != 3 else (0, 1, 1)
+
         if use_conv:
-            self.conv = conv_nd(dims, channels, channels, 3, padding=1)
+            self.conv = conv_nd(dims, channels, channels, kernel_size, padding=padding)
 
     def forward(self, x):
         assert x.shape[1] == self.channels

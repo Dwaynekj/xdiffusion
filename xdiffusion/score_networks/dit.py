@@ -1,8 +1,6 @@
 """Transformer based score network from Scalable Diffusion Models with Transformers."""
 
 import torch
-import math
-import numpy as np
 from typing import Dict
 
 from xdiffusion.layers.attention import MultiHeadSelfAttention as Attention

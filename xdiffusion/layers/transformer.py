@@ -17,7 +17,7 @@ from xdiffusion.layers.attention import (
     SpatialCrossAttention,
     LastChannelCrossAttention,
 )
-from xdiffusion.conditioning import (
+from xdiffusion.context import (
     ContextAdapter,
     NullContextAdapter,
 )

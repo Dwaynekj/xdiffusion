@@ -16,11 +16,10 @@ image_imbeddings
 from abc import abstractmethod
 import torch
 from transformers import T5Tokenizer
-from typing import Dict, List
+from typing import Dict
 
 from xdiffusion.layers.clip import FrozenCLIPTextTokenizer
 from xdiffusion.tokenizer.bpe import get_encoder
-from xdiffusion.utils import freeze
 
 
 class ContextAdapter(torch.nn.Module):
@@ -47,6 +46,22 @@ class IgnoreContextAdapter(torch.nn.Module):
         return context
 
 
+class IgnoreInputPreprocessor(torch.nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+
+    def forward(self, x, *args, **kwargs):
+        return x
+
+
+class UnconditionalTextPromptsAdapter(torch.nn.Module):
+    def forward(self, context: Dict):
+        new_context = context.copy()
+        text_prompts = context["text_prompts"]
+        new_context["text_prompts"] = [""] * len(text_prompts)
+        return new_context
+
+
 class TextTokenAdapter(torch.nn.Module):
     def __init__(self, **kwargs):
         super().__init__()
@@ -56,16 +71,31 @@ class TextTokenAdapter(torch.nn.Module):
 
 
 class TextEmbeddingsAdapter(torch.nn.Module):
-    def __init__(self, swap_context_channels: bool = False, **kwargs):
+    def __init__(
+        self,
+        swap_context_channels: bool = False,
+        input_projection_dim: int = -1,
+        output_projection_dim: int = -1,
+        **kwargs
+    ):
         super().__init__()
         self._swap_context_channels = swap_context_channels
 
+        if output_projection_dim > 0 and input_projection_dim > 0:
+            self._projection = torch.nn.Linear(
+                input_projection_dim, output_projection_dim
+            )
+        else:
+            self._projection = torch.nn.Identity()
+
     def forward(self, context: Dict):
-        return (
+        x = (
             context["text_embeddings"].permute(0, 2, 1)
             if self._swap_context_channels
             else context["text_embeddings"]
         )
+        x = self._projection(x)
+        return x
 
 
 class TextTokenProjectionAdapter(torch.nn.Module):
@@ -178,11 +208,3 @@ class T5TextPromptsPreprocessor(torch.nn.Module):
                 text_inputs_on_device[k] = v.detach().to(device)
             context["text_tokens"] = text_inputs_on_device
         return context
-
-
-class IgnoreInputPreprocessor(torch.nn.Module):
-    def __init__(self, *args, **kwargs):
-        super().__init__()
-
-    def forward(self, x, *args, **kwargs):
-        return x

@@ -61,7 +61,9 @@ class GaussianDiffusion_DDPM(DiffusionModel):
 
         self._is_learned_sigma = config.diffusion.score_network.params.is_learned_sigma
         self._is_class_conditional = (
-            config.diffusion.score_network.params.is_class_conditional
+            (config.diffusion.score_network.params.is_class_conditional)
+            if "is_class_conditional" in config.diffusion.score_network.params.to_dict()
+            else False
         )
         self._num_classes = config.data.num_classes
         self._unconditional_guidance_probability = (
@@ -105,11 +107,7 @@ class GaussianDiffusion_DDPM(DiffusionModel):
     def config(self) -> DotConfig:
         return self._config
 
-    def loss_on_batch(
-        self,
-        images,
-        context: Dict,
-    ) -> Dict:
+    def loss_on_batch(self, images, context: Dict, **kwargs) -> Dict:
         """Calculates the reverse process loss on a batch of images.
 
         Args:
@@ -124,7 +122,7 @@ class GaussianDiffusion_DDPM(DiffusionModel):
             Dictionary of loss values, of which the "loss" entry will
             be the training loss.
         """
-        B, _, H, W = images.shape
+        B = images.shape[0]
         device = images.device
         context = context.copy()
 
@@ -472,6 +470,7 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         classifier_free_guidance: Optional[float] = None,
         num_sampling_steps: Optional[int] = None,
         sampler: Optional[ReverseProcessSampler] = None,
+        initial_noise: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[List[torch.Tensor]]]:
         """Unconditionally/conditionally sample from the diffusion model.
 
@@ -488,12 +487,21 @@ class GaussianDiffusion_DDPM(DiffusionModel):
             Tensor batch of samples from the model.
         """
         # The output shape of the data.
-        shape = (
-            num_samples,
-            self._config.diffusion.sampling.output_channels,
-            self._config.diffusion.sampling.output_spatial_size,
-            self._config.diffusion.sampling.output_spatial_size,
-        )
+        if "output_frames" in self._config.diffusion.sampling.to_dict():
+            shape = (
+                num_samples,
+                self._config.diffusion.sampling.output_channels,
+                self._config.diffusion.sampling.output_frames,
+                self._config.diffusion.sampling.output_spatial_size,
+                self._config.diffusion.sampling.output_spatial_size,
+            )
+        else:
+            shape = (
+                num_samples,
+                self._config.diffusion.sampling.output_channels,
+                self._config.diffusion.sampling.output_spatial_size,
+                self._config.diffusion.sampling.output_spatial_size,
+            )
         device = next(self.parameters()).device
         self.eval()
 
@@ -509,7 +517,7 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         # sampling augmentation level if it exists
         if "super_resolution" in self._config and context is not None:
             if "sampling_augmentation_level" in self._config.super_resolution:
-                context["sampling_augmentation_level"] = (
+                context["augmentation_level"] = (
                     self._config.super_resolution.sampling_augmentation_level
                 )
 
@@ -525,7 +533,7 @@ class GaussianDiffusion_DDPM(DiffusionModel):
             else self._noise_scheduler.steps()
         )
 
-        latent_samples = self._p_sample_loop(
+        latent_samples, intermediate_outputs = self._p_sample_loop(
             shape,
             context=context,
             unconditional_context=unconditional_context,
@@ -533,13 +541,14 @@ class GaussianDiffusion_DDPM(DiffusionModel):
             classifier_free_guidance=classifier_free_guidance,
             num_sampling_steps=sampling_steps,
             sampler=sampler,
+            initial_noise=initial_noise,
         )
         latents = latent_samples
 
         # Decode the samples from the latent space
         samples = unnormalize_to_zero_to_one(latents)
         self.train()
-        return samples, None
+        return samples, intermediate_outputs
 
     def get_classifier_guidance(
         self, classifier: torch.nn.Module, classifier_scale: float
@@ -565,19 +574,45 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         return guidance_fn
 
     def print_model_summary(self):
-        batch_size = 128
+        batch_size = 4
+        device = "cuda"
+
+        B = batch_size
+        C = self._config.data.num_channels
+        H = W = self._config.data.image_size
+        is_video = (
+            True if "input_number_of_frames" in self._config.data.to_dict() else False
+        )
+        F = (
+            self._config.data.input_number_of_frames
+            if "input_number_of_frames" in self._config.data.to_dict()
+            else 1
+        )
 
         summary_context = {
             "timestep": (
-                torch.rand(size=(batch_size,))
+                torch.rand(size=(batch_size,), device=device)
                 if self._noise_scheduler.continuous()
-                else torch.randint(0, 10, size=(batch_size,))
+                else torch.randint(0, 10, size=(batch_size,), device=device)
             ),
-            "logsnr_t": torch.rand(size=(batch_size,)),
+            "logsnr_t": torch.rand(size=(batch_size,), device=device),
             "text_prompts": [""] * batch_size,
             "classes": torch.randint(
-                0, self._config.data.num_classes, size=(batch_size,)
+                0, self._config.data.num_classes, size=(batch_size,), device=device
             ),
+            # Video specific context, ignored for image
+            "x0": torch.zeros(B, C, F, H, W),
+            "frame_indices": torch.tile(
+                torch.arange(end=F, device=device)[None, ...],
+                (B, 1),
+            ),
+            "observed_mask": torch.zeros(
+                size=(B, C, F, 1, 1), dtype=torch.float32, device=device
+            ),
+            "latent_mask": torch.ones(
+                size=(B, C, F, 1, 1), dtype=torch.float32, device=device
+            ),
+            "video_mask": torch.ones(size=(B, F), dtype=torch.bool, device=device),
         }
 
         if "super_resolution" in self._config:
@@ -585,34 +620,47 @@ class GaussianDiffusion_DDPM(DiffusionModel):
                 torch.rand(
                     batch_size,
                     self._config.data.num_channels,
-                    self._config.super_resolution.low_resolution_spatial_size,
-                    self._config.super_resolution.low_resolution_spatial_size,
+                    self._config.super_resolution.low_resolution_size,
+                    self._config.super_resolution.low_resolution_size,
+                    device=device,
                 )
             )
             summary_context["augmentation_timestep"] = torch.randint(
-                0, 10, size=(batch_size,)
+                0, 10, size=(batch_size,), device=device
             )
 
         # Preprocess the context
         for preprocessor in self._context_preprocessors:
-            summary_context = preprocessor(summary_context, device="cpu")
+            summary_context = preprocessor(summary_context, device=device)
 
         # Monkey path torch summary to deal with str inputs from text prompts
         fix_torchinfo_for_str()
         summary(
-            self._score_network,
+            self._score_network.to(device),
             input_data=[
-                torch.rand(
-                    batch_size,
-                    self._config.diffusion.score_network.params.input_channels,
-                    self._config.diffusion.score_network.params.input_spatial_size,
-                    self._config.diffusion.score_network.params.input_spatial_size,
+                (
+                    torch.rand(
+                        batch_size,
+                        self._config.diffusion.score_network.params.input_channels,
+                        self._config.diffusion.score_network.params.input_number_of_frames,
+                        self._config.diffusion.score_network.params.input_spatial_size,
+                        self._config.diffusion.score_network.params.input_spatial_size,
+                        device=device,
+                    )
+                    if is_video
+                    else torch.rand(
+                        batch_size,
+                        self._config.diffusion.score_network.params.input_channels,
+                        self._config.diffusion.score_network.params.input_spatial_size,
+                        self._config.diffusion.score_network.params.input_spatial_size,
+                        device=device,
+                    )
                 ),
                 summary_context,
             ],
         )
 
-    def load_checkpoint(self, checkpoint_path: str):
+    def load_checkpoint(self, checkpoint_path: str, strict: bool = False):
         # Load the state dict for the score network
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
         if hasattr(self._score_network, "load_model_weights"):
@@ -627,7 +675,11 @@ class GaussianDiffusion_DDPM(DiffusionModel):
                     score_network_state_pairs.append((k, v))
             self._score_network.load_model_weights(dict(score_network_state_pairs))
         else:
-            self.load_state_dict(checkpoint["model_state_dict"])
+            missing_keys, unexpected_keys = self.load_state_dict(
+                checkpoint["model_state_dict"], strict=strict
+            )
+            for k in missing_keys:
+                assert "temporal" in k, k
 
     def configure_optimizers(self, learning_rate: float) -> List[torch.optim.Optimizer]:
 
@@ -688,6 +740,8 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         guidance_fn=None,
         classifier_free_guidance: Optional[float] = None,
         sampler: Optional[ReverseProcessSampler] = None,
+        initial_noise: Optional[torch.Tensor] = None,
+        save_intermediate_outputs: bool = False,
     ):
         """Defines Algorithm 2 sampling using notation from DDPM implementation.
 
@@ -712,7 +766,16 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         device = next(self.parameters()).device
 
         # Initial image is pure noise
-        x_t = torch.randn(shape, device=device)
+        x_t = (
+            torch.randn(shape, device=device)
+            if initial_noise is None
+            else initial_noise
+        )
+
+        intermediate_outputs = []
+
+        if save_intermediate_outputs:
+            intermediate_outputs.append(unnormalize_to_zero_to_one(x_t))
 
         sampler = sampler if sampler is not None else self._reverse_process_sampler
         for timestep_idx in tqdm(
@@ -766,7 +829,10 @@ class GaussianDiffusion_DDPM(DiffusionModel):
             )
             x_t = x_t_minus_1
 
-        return x_t
+            if save_intermediate_outputs:
+                intermediate_outputs.append(unnormalize_to_zero_to_one(x_t))
+
+        return x_t, intermediate_outputs
 
     def _vb_bits_per_dim(
         self, x_0, x_t, context: Dict, epsilon_v_param, clip_denoised: bool

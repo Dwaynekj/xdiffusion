@@ -7,15 +7,9 @@ from typing import Callable, Dict, List, Optional, Tuple
 
 from xdiffusion.ddpm import GaussianDiffusion_DDPM
 from xdiffusion.diffusion import DiffusionModel
+from xdiffusion.samplers.base import ReverseProcessSampler
 from xdiffusion.utils import (
-    discretized_gaussian_log_likelihood,
-    instantiate_from_config,
-    instantiate_partial_from_config,
     load_yaml,
-    normal_kl,
-    normalize_to_neg_one_to_one,
-    prob_mask_like,
-    unnormalize_to_zero_to_one,
     DotConfig,
 )
 
@@ -76,12 +70,7 @@ class GaussianDiffusionCascade(DiffusionModel):
             )
         return optimizers
 
-    def loss_on_batch(
-        self,
-        images,
-        context: Dict,
-        stage_idx: int,
-    ) -> Dict:
+    def loss_on_batch(self, images, context: Dict, stage_idx: int, **kwargs) -> Dict:
         """Calculates the reverse process loss on a batch of images.
 
         Args:
@@ -92,47 +81,7 @@ class GaussianDiffusionCascade(DiffusionModel):
             Dictionary of loss values, of which the "loss" entry will
             be the training loss.
         """
-        # 0th stage is the base stage, otherwise we are working on the
-        # i'th super resolution stage.
-        if stage_idx == 0:
-            # Resize the input to the base model to the correct low resolution.
-            images = transforms.v2.functional.resize(
-                images,
-                (
-                    self._config.base_stage.model.input_spatial_size,
-                    self._config.base_stage.model.input_spatial_size,
-                ),
-                antialias=True,
-            )
-            return self._base_stage.loss_on_batch(
-                images, low_resolution_images=None, y=y
-            )
-        else:
-            assert stage_idx >= 1
-            current_stage_size = self._config[
-                f"cascaded_stage_{stage_idx-1}"
-            ].model.input_spatial_size
-
-            if stage_idx == 1:
-                last_stage_size = self._config.base_stage.model.input_spatial_size
-            else:
-                last_stage_size = self._config[
-                    f"cascaded_stage_{stage_idx-2}"
-                ].model.input_spatial_size
-
-            # Create the low-resolution images for SR conditioning.
-            low_resolution_images = transforms.v2.functional.resize(
-                images, (last_stage_size, last_stage_size), antialias=True
-            )
-
-            # Create the images for the current size
-            if images.shape[2] != current_stage_size:
-                images = transforms.v2.functional.resize(
-                    images, (current_stage_size, current_stage_size), antialias=True
-                )
-            return self._super_resolution_stages[stage_idx - 1].loss_on_batch(
-                images, low_resolution_images=low_resolution_images, y=y
-            )
+        raise NotImplementedError("Cascade loss is calculated at individual stages.")
 
     def sample(
         self,
@@ -140,7 +89,12 @@ class GaussianDiffusionCascade(DiffusionModel):
         num_samples: int = 16,
         guidance_fn: Optional[Callable] = None,
         classifier_free_guidance: Optional[float] = None,
+        sampler: Optional[ReverseProcessSampler] = None,
+        initial_noise: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[List[torch.Tensor]]]:
+        assert initial_noise is None
+        assert sampler is None
+
         # Sample from each stage, passing the results to each next stage.
         all_stage_output = []
         output_from_previous_layer = None
