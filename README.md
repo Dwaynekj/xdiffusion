@@ -43,6 +43,7 @@ The following is a list of the supported image models, their current results, an
 
 | Date  | Name  | Paper | Config | Results | Instructions
 | :---- | :---- | ----- | ------ | ----- | -----
+| April 2022 | Video Diffusion Models | [Video Diffusion Models](https://arxiv.org/abs/2204.03458) | [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/video/moving_mnist/video_diffusion_models.yaml) | ![Video Diffusion Models](https://drive.google.com/uc?export=view&id=1pF6WVY8_dlGudxZIsml3VWPxbUs0ONfa) | [instructions](https://github.com/swookey-thinky/xdiffusion/blob/main/docs/video/video_diffusion_models.md)
 
 ## TODO
 
