@@ -1,39 +1,50 @@
-# An Imagen based super-resolution model, with text conditioning at each attention
+# Imagen Video - Temporal Super Resolution
+#
+# Configuration file for implementation of "Imagen Video: High Definition Video Generation with Diffusion Models",
+# (https://arxiv.org/abs/2210.02303).
+#
+# An Imagen based video super-resolution model, with text conditioning at each attention
 # layer using a T5 tokenizer/encoder, gaussian conditioning augmentation, and augmentation
 # level conditioning.
 super_resolution:
+  is_spatial: False
+  is_temporal: True
   # The low resolution input size.
-  low_resolution_spatial_size: 8
+  low_resolution_size: 8
   # The upsampled output size of the model.
-  super_resolution_spatial_size: 32
+  super_resolution_size: 16
+  # The sampling scheme for the low-resolution videos. Only used
+  # for temporal super resolution.
+  low_resolution_sampling_scheme: "frameskip_3"
   # The key where the low resolution input samples are stored.
   conditioning_key: "low_resolution_images"
   # The augmentation level to use for sampling
   sampling_augmentation_level: 0.25
 
 diffusion:
-  parameterization: "epsilon"
+  parameterization: "v"
   # Sampling section determines the size of the sampled output
   # from the model, and defines the sampling method used
   sampling:
     output_channels: 1
-    output_spatial_size: 32
+    output_spatial_size: 16
+    output_frames: 16
     target: xdiffusion.samplers.ancestral.AncestralSampler
     params: {}
+
   # The noise scheduler to use with the forward diffusion process.
   noise_scheduler:
-    target: xdiffusion.scheduler.DiscreteNoiseScheduler
+    target: xdiffusion.scheduler.ContinuousNoiseScheduler
     params:
-      # The number of noise scales
-      num_scales: 1000
-      # The schedule type
-      schedule_type: "cosine"
-      # Loss type to use for noise prediction.
+      num_scales: 1024
+      logsnr_schedule: "cosine"
       loss_type: "l2"
-      importance_sampler:
-        target: xdiffusion.importance_sampling.UniformSampler
-        params:
-          num_timesteps: 1000
+      logsnr_min: -20
+      logsnr_max: 20
+  importance_sampler:
+    target: xdiffusion.importance_sampling.UniformSampler
+    params:
+      num_timesteps: 1024
   # A preprocessor to use with the context before sending to the score network.
   context_preprocessing:
       # The Prompts Preprocessor converts the list of text prompts in the context
@@ -49,8 +60,11 @@ diffusion:
   input_preprocessing:
     target: xdiffusion.layers.super_resolution.InputPreprocessor
     params:
-      low_resolution_spatial_size: 8
-      super_resolution_spatial_size: 32
+      is_spatial: False
+      is_temporal: True
+      temporal_upsampling: "frameskip_3"
+      low_resolution_size: 8
+      super_resolution_size: 16
       context_input_key: "low_resolution_images"
       apply_gaussian_conditioning_augmentation: True
 
@@ -73,22 +87,30 @@ diffusion:
   score_network:
     target: xdiffusion.score_networks.efficient_unet.Unet
     params:
-      # The number of input channels to the model. For super resolution,
-      # we concatenate the low resolution images, scaled to the output
-      # size of the model, to the original diffusion input.
+  # Defines the score network for predicting the noise parameter
+  score_network:
+    target: xdiffusion.score_networks.unet_3d.Unet
+    params:
+      # The number of input channels to the model. The low-res
+      # conditioning is appended to the input
       input_channels: 2
       # The number of output channels to the model.
       output_channels: 1
       # The spatial size of the input to the model.
-      input_spatial_size: 32
+      input_spatial_size: 16
+      # The number of frames in each batch
+      input_number_of_frames: 16
       # The number of features/channels at the start of
       # the network. This defines the inner dimensions
       # of the model.
       num_features: 128
       # Resnet block channel multipliers.
-      channel_multipliers: [1, 2, 2, 2]
+      channel_multipliers: [1, 2, 2]
+      # Attention resolutions. Attention only at the lowest
+      # level.
+      attention_resolutions: [4]
       # The number of resnet blocks per resolution.
-      num_resnet_blocks: [1, 1, 2, 4]
+      num_resnet_blocks: [1, 2, 4]
       # Use scale/shift of the GroupNorm in the timestep embedding.
       # This is also called Adaptive Group Normalization.
       use_scale_shift_norm: True
@@ -100,6 +122,8 @@ diffusion:
       resnet_block_type: 'biggan'
       # Dropout scale
       dropout: 0.1
+      # The number of MLP layers to use on the conditioning signal
+      mlp_layers: 2
       # Does the model include a learned sigma or a fixed sigma.
       is_learned_sigma: False
       # True if this is a class conditional model
@@ -107,16 +131,6 @@ diffusion:
       # The number of classes for a class conditional model.
       # Only used if is_class_conditional=True.
       num_classes: 10
-      # Defines the attention mechanism used
-      attention:
-        # The resolution to apply attention layers.
-        attention_resolutions: [16]
-        # The number of heads in the attention layers
-        attention_heads: 2
-        # The number of channels in the attention layers
-        attention_channels: 64
-        # True is causal attention masks should be used
-        is_causal: False
       # Additional conditioning signals for the model. The projections
       # defined here will be applied before running through the rest of the
       # score network.
@@ -146,13 +160,23 @@ diffusion:
           # Timestep -> timestep embedding
           - target: xdiffusion.layers.embedding.RunProjection
             params:
-              input_context_key: "timestep"
+              input_context_key: "logsnr_t"
               output_context_key: "timestep_embedding"
               projection_key: "timestep"
           # Projects the text tokens into text embeddings using the projection
           # defined for "text_tokens"
-          - target: xdiffusion.context.TextTokenProjectionAdapter
-            params: {}
+          - target: xdiffusion.layers.embedding.RunProjection
+            params:
+              input_context_key: "text_tokens"
+              output_context_key: "text_embeddings"
+              projection_key: "text_tokens"
+          # Adds the text embeddings to the timestep projection using a pooled embedding
+          # vector with Layer Norm
+          - target: xdiffusion.layers.embedding.PooledTextEmbeddingsToTimestep
+            params:
+              text_embedding_dim: 768
+              time_embedding_dim: 512
+              attention_pooling_heads: 64
           # Adds the gaussian conditioning augmentation level to the pooled
           # timestep embeddings.
           - target: xdiffusion.layers.super_resolution.GaussianConditioningAugmentationToTimestep
@@ -161,21 +185,21 @@ diffusion:
               time_embedding_mult: 4
         # The context transformer to use at each attention layer. This transforms
         # the context with a different set of parameters at each attention layer.
-        context_transformer_layer:
+        spatial_context_transformer_layer:
           target: xdiffusion.layers.attention.SpatialCrossAttention
           params:
-            # The dimensionality of the context signal coming in.
-            # -1 signifies no context coming in, and this defaults to Multi-Head
-            # self attention.
             context_dim: 768
             # The number of heads in the attention layer.
-            heads: 2
+            heads: 4
             # The dimensionality of each attention head.
             dim_head: 64
             # Dropout probability to use in training.
             dropout: 0.1
             # Imagen suggested layer norm at the cross attention layer helps.
             context_layer_norm: True
+            # The input dimension of the context projection is the text embedding
+            # sequence length
+            context_projection_input_dim: 77
             # The context adapter for the conditioning signal
             context_adapter:
               target: xdiffusion.context.TextEmbeddingsAdapter
@@ -183,13 +207,26 @@ diffusion:
                 # For the cross attention, we want to operate on the embedding dimension,
                 # not the token sequence length.
                 swap_context_channels: True
+        temporal_context_transformer_layer:
+          target: xdiffusion.layers.utils.TemporalConvolution
+          params:
+            kernel_size: 3
+            padding: 1
+
 
 # Describes the dataset used in training.
 data:
   # Spatial width/height of the data input to the model.
-  image_size: 32
+  image_size: 16
   # Number of channels in the input data
   num_channels: 1
   # The number of classes in the dataset
   num_classes: 10
-
+  # The number of frames in the input dataset. This could be different
+  # than the number of frames that is in the data itself.
+  input_number_of_frames: 16
+  # Method of processing the input frames. Can be "clip", which takes
+  # the first N frames, or "sample", which skips frames from the input
+  # to get the required number of frames (so a source video of 30 frames, with input_number_of_frames
+  # set to 15, would take every (30//15=2) frames).
+  frame_processing: "clip"

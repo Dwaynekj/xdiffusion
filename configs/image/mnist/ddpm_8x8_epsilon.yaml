@@ -27,12 +27,12 @@ diffusion:
   context_preprocessing:
       # The Prompts Preprocessor converts the list of text prompts in the context
       # into a batch of text tokens of shape (B, text_context_size)
-      - target: xdiffusion.conditioning.TextPromptsPreprocessor
+      - target: xdiffusion.context.TextPromptsPreprocessor
         params:
           text_context_size: 128
   # A preprocessor for input to the model.
   input_preprocessing:
-    target: xdiffusion.conditioning.IgnoreInputPreprocessor
+    target: xdiffusion.context.IgnoreInputPreprocessor
     params: {}
   # Setting for classifier free guidance.
   classifier_free_guidance:
@@ -47,7 +47,7 @@ diffusion:
     # to be applied in both training and sampling, and will return a new
     # context dictionary given the original context dictionary.
     unconditional_context:
-      target: xdiffusion.conditioning.UnconditionalTextPromptsAdapter
+      target: xdiffusion.context.UnconditionalTextPromptsAdapter
       params: {}
   # Defines the score network for predicting the noise parameter
   score_network:
@@ -129,7 +129,7 @@ diffusion:
               output_context_key: "timestep_embedding"
               projection_key: "timestep"
           # Projects the text tokens into text embeddings
-          - target: xdiffusion.conditioning.TextTokenProjectionAdapter
+          - target: xdiffusion.context.TextTokenProjectionAdapter
             params: {}
         # The context transformer to use at each attention layer. This transforms
         # the context with a different set of parameters at each attention layer.
@@ -149,7 +149,7 @@ diffusion:
             dropout: 0.1
             # The context adapter for the conditioning signal
             context_adapter:
-              target: xdiffusion.conditioning.TextEmbeddingsAdapter
+              target: xdiffusion.context.TextEmbeddingsAdapter
               params: {}
 
 # Describes the dataset used in training.

@@ -1,0 +1,21 @@
+diffusion_cascade:
+  cascade_layer_1:
+    # Base DDPM layer at 16x16 resolution, 8 frames per video.
+    config: "configs/video/moving_mnist/imagen_video_8x16x16.yaml"
+  cascade_layer_2:
+    # Temporal super resolution, 8->16
+    config: "configs/video/moving_mnist/imagen_video_tsr_8x16.yaml"
+  cascade_layer_3:
+    # Spatial super resolution, 16->32
+    config: "configs/video/moving_mnist/imagen_video_ssr_16x32.yaml"
+
+# Describes the dataset used in training.
+data:
+  # Spatial width/height of the data input to the model.
+  image_size: 32
+  # Number of channels in the input data
+  num_channels: 1
+  # The number of classes in the dataset
+  num_classes: 10
+  # Number of frames in the dataset
+  input_number_of_frames: 30

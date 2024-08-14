@@ -25,11 +25,11 @@ diffusion:
   context_preprocessing:
       # The Prompts Preprocessor converts the list of text prompts in the context
       # into a batch of text tokens of shape (B, text_context_size)
-      - target: xdiffusion.conditioning.IgnoreContextAdapter
+      - target: xdiffusion.context.IgnoreContextAdapter
         params: {}
   # A preprocessor for input to the model.
   input_preprocessing:
-    target: xdiffusion.conditioning.IgnoreInputPreprocessor
+    target: xdiffusion.context.IgnoreInputPreprocessor
     params: {}
   # Setting for classifier free guidance.
   classifier_free_guidance:

@@ -29,13 +29,13 @@ diffusion:
   context_preprocessing:
       # The Prompts Preprocessor converts the list of text prompts in the context
       # into a batch of text tokens of shape (B, text_context_size)
-      - target: xdiffusion.conditioning.CLIPTextPromptsPreprocessor
+      - target: xdiffusion.context.CLIPTextPromptsPreprocessor
         params:
           # The CLIP text embedder has a maximum token sequence length of 77.
           text_sequence_length: 77
   # A preprocessor for input to the model.
   input_preprocessing:
-    target: xdiffusion.conditioning.IgnoreInputPreprocessor
+    target: xdiffusion.context.IgnoreInputPreprocessor
     params: {}
   # Setting for classifier free guidance.
   classifier_free_guidance:
@@ -50,7 +50,7 @@ diffusion:
     # to be applied in both training and sampling, and will return a new
     # context dictionary given the original context dictionary.
     unconditional_context:
-      target: xdiffusion.conditioning.UnconditionalTextPromptsAdapter
+      target: xdiffusion.context.UnconditionalTextPromptsAdapter
       params: {}
   # Defines the score network for predicting the noise parameter
   score_network:
@@ -134,7 +134,7 @@ diffusion:
           # Projects the text tokens into text embeddings. This simply applies
           # the projection defined above for "text_tokens", and stores the result
           # in the "text_embeddings" key of the context.
-          - target: xdiffusion.conditioning.TextTokenProjectionAdapter
+          - target: xdiffusion.context.TextTokenProjectionAdapter
             params: {}
         context_transformer_layer:
           target: xdiffusion.layers.transformer.SpatialTransformer
@@ -153,7 +153,7 @@ diffusion:
             dropout: 0.1
             # The context adapter for the conditioning signal
             context_adapter:
-              target: xdiffusion.conditioning.TextEmbeddingsAdapter
+              target: xdiffusion.context.TextEmbeddingsAdapter
               params: {}
 
 # Describes the dataset used in training.

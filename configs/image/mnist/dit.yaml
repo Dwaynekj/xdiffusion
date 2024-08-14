@@ -26,11 +26,11 @@ diffusion:
   # A preprocessor to use with the context before sending to the score network.
   context_preprocessing:
       # No context to preprocess for this model
-      - target: xdiffusion.conditioning.IgnoreContextAdapter
+      - target: xdiffusion.context.IgnoreContextAdapter
         params: {}
   # A preprocessor for input to the model.
   input_preprocessing:
-    target: xdiffusion.conditioning.IgnoreInputPreprocessor
+    target: xdiffusion.context.IgnoreInputPreprocessor
     params: {}
   # Setting for classifier free guidance.
   classifier_free_guidance:
@@ -45,7 +45,7 @@ diffusion:
     # to be applied in both training and sampling, and will return a new
     # context dictionary given the original context dictionary.
     unconditional_context:
-      target: xdiffusion.conditioning.UnconditionalClassesAdapter
+      target: xdiffusion.context.UnconditionalClassesAdapter
       params:
         num_classes: 10
   dynamic_thresholding:

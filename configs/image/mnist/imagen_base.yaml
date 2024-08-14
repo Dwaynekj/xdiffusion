@@ -27,7 +27,7 @@ diffusion:
   context_preprocessing:
       # The Prompts Preprocessor converts the list of text prompts in the context
       # into a batch of text tokens of shape (B, text_context_size)
-      - target: xdiffusion.conditioning.T5TextPromptsPreprocessor
+      - target: xdiffusion.context.T5TextPromptsPreprocessor
         params:
           # The max length of the text token sequence
           max_length: 77
@@ -35,7 +35,7 @@ diffusion:
           model_name: "google/t5-v1_1-base"
   # A preprocessor for input to the model.
   input_preprocessing:
-    target: xdiffusion.conditioning.IgnoreInputPreprocessor
+    target: xdiffusion.context.IgnoreInputPreprocessor
     params: {}
   # Setting for classifier free guidance.
   classifier_free_guidance:
@@ -50,7 +50,7 @@ diffusion:
     # to be applied in both training and sampling, and will return a new
     # context dictionary given the original context dictionary.
     unconditional_context:
-      target: xdiffusion.conditioning.UnconditionalTextPromptsAdapter
+      target: xdiffusion.context.UnconditionalTextPromptsAdapter
       params: {}
   dynamic_thresholding:
     enable: True
@@ -136,7 +136,7 @@ diffusion:
               projection_key: "timestep"
           # Projects the text tokens into text embeddings using the projection
           # defined for "text_tokens"
-          - target: xdiffusion.conditioning.TextTokenProjectionAdapter
+          - target: xdiffusion.context.TextTokenProjectionAdapter
             params: {}
           # Adds the text embeddings to the timestep projection using a pooled embedding
           # vector with Layer Norm
@@ -164,7 +164,7 @@ diffusion:
             context_layer_norm: True
             # The context adapter for the conditioning signal
             context_adapter:
-              target: xdiffusion.conditioning.TextEmbeddingsAdapter
+              target: xdiffusion.context.TextEmbeddingsAdapter
               params:
                 # For the cross attention, we want to operate on the embedding dimension,
                 # not the token sequence length.

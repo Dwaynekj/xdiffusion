@@ -34,7 +34,7 @@ diffusion:
   context_preprocessing:
       # The Prompts Preprocessor converts the list of text prompts in the context
       # into a batch of text tokens of shape (B, text_context_size)
-      - target: xdiffusion.conditioning.IgnoreContextAdapter
+      - target: xdiffusion.context.IgnoreContextAdapter
         params: {}
   # A preprocessor for input to the model. For super resolution, this is
   # where we attach the low resolution input to the model input.
