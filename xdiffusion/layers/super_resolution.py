@@ -110,12 +110,14 @@ class InputPreprocessor(torch.nn.Module):
                         )
                         * noise_scheduler.steps()
                         * context["augmentation_level"]
-                    )
+                    ).to(torch.long)
             else:
                 if "augmentation_timestep" in context:
                     s = context["augmentation_timestep"]
                 else:
-                    s = noise_scheduler.sample_random_times(batch_size=B)
+                    s, _ = noise_scheduler.sample_random_times(
+                        batch_size=B, device=low_res_x_0.device
+                    )
 
             # Now noise the low res images to s
             low_res_x_0 = noise_scheduler.q_sample(low_res_x_0, s)

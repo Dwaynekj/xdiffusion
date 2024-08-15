@@ -3,9 +3,9 @@
 # level conditioning.
 super_resolution:
   # The low resolution input size.
-  low_resolution_spatial_size: 8
+  low_resolution_size: 8
   # The upsampled output size of the model.
-  super_resolution_spatial_size: 32
+  super_resolution_size: 32
   # The key where the low resolution input samples are stored.
   conditioning_key: "low_resolution_images"
   # The augmentation level to use for sampling
@@ -49,8 +49,8 @@ diffusion:
   input_preprocessing:
     target: xdiffusion.layers.super_resolution.InputPreprocessor
     params:
-      low_resolution_spatial_size: 8
-      super_resolution_spatial_size: 32
+      low_resolution_size: 8
+      super_resolution_size: 32
       context_input_key: "low_resolution_images"
       apply_gaussian_conditioning_augmentation: True
 

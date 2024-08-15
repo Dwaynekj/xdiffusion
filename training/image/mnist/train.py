@@ -172,7 +172,7 @@ def train(
                 if "super_resolution" in config_for_layer:
                     # First create the low resolution context.
                     low_resolution_spatial_size = (
-                        config_for_layer.super_resolution.low_resolution_spatial_size
+                        config_for_layer.super_resolution.low_resolution_size
                     )
                     low_resolution_images = transforms.functional.resize(
                         images,
@@ -287,9 +287,7 @@ def sample(
         context["classes"] = classes
 
         # Downsample to create the low resolution context
-        low_resolution_spatial_size = (
-            config.super_resolution.low_resolution_spatial_size
-        )
+        low_resolution_spatial_size = config.super_resolution.low_resolution_size
         low_resolution_images = transforms.functional.resize(
             images,
             size=(

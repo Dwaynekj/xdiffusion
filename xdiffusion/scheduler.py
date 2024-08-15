@@ -300,7 +300,6 @@ class DiscreteNoiseScheduler(NoiseScheduler):
         """
         if noise is None:
             noise = torch.randn_like(x_start)
-
         return (
             extract(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
             + extract(self.sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise
