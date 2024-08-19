@@ -28,6 +28,8 @@ If you have issues with PyTorch and different CUDA versions on your instance, ma
 
 ### Training Datasets
 
+In this repository, we will be working with the [MNIST](https://en.wikipedia.org/wiki/MNIST_database) dataset because it is simple and can be trained in real time with minimal GPU power and memory. The main difference between MNIST and other datasets is the single channel of the imagery, versus 3 channels in most other datasets. We will make sure that the models we build can easily accomodate 1- or 3-channel data, so that you can test the models we build on other datasets.
+
 ### Image Models
 The following is a list of the supported image models, their current results, and a link to their configuration files and documentation.
 
@@ -39,6 +41,12 @@ The following is a list of the supported image models, their current results, an
 ## Video Diffusion
 
 ### Training Datasets
+
+Due to the resource constraints of most models, we have decided to use the [Moving MNIST](https://www.cs.toronto.edu/~nitish/unsupervised_video/) dataset to train on. Moving MNIST is a simple dataset similar to MNIST, of digits which move around the screen. It is an unlabeled dataset, so we do not have access to text labels to determine which digits are moving around the screen, but we will address that deficiency as well. We train at a reduced resolution of `32x32`, due to the resource constraints that most models require. This allows us to train most diffusion models on a T4 instance, which is free to run on [Google Colab](https://colab.research.google.com/). We limit training and sample generation to 16 frames, even though the source dataset contains 20 frames.
+
+Sample from the original dataset:
+
+![Moving MNIST](https://drive.google.com/uc?export=view&id=1FS9lEd6DPFJ4Ka7hUgqk2BlsJ8FzOdPE)
 
 ### Video Diffusion Models
 The following is a list of the supported image models, their current results, and a link to their configuration files and documentation.
