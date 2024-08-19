@@ -13,4 +13,4 @@ sampling_scheme:
     # The number of frames to increment at each step. This is the number
     # of frames generated at each step. The video will be conditioned
     # on (max_frames - step_size) previous frames.
-    step_size: 8
+    step_size: 12

@@ -28,6 +28,7 @@ def train(
     sample_with_guidance: bool,
     save_and_sample_every_n: int,
     load_model_weights_from_checkpoint: str,
+    resume_from: str,
 ):
     global OUTPUT_NAME
     OUTPUT_NAME = f"{OUTPUT_NAME}/{str(Path(config_path).stem)}"
@@ -96,6 +97,9 @@ def train(
     if load_model_weights_from_checkpoint:
         diffusion_model.load_checkpoint(load_model_weights_from_checkpoint)
 
+    if resume_from:
+        diffusion_model.load_checkpoint(resume_from)
+
     # Build context to display the model summary.
     diffusion_model.print_model_summary()
 
@@ -122,6 +126,13 @@ def train(
     #  rate to 2 × 10−4 without any sweeping, and we lowered it to 2 × 10−5
     #  for the 256 × 256 images, which seemed unstable to train with the larger learning rate."
     optimizers = diffusion_model.configure_optimizers(learning_rate=2e-4)
+
+    # Load the optimizers if we have them from the checkpoint
+    if resume_from:
+        checkpoint = torch.load(resume_from, map_location="cpu")
+        num_optimizers = checkpoint["num_optimizers"]
+        for i in range(num_optimizers):
+            optimizers[i].load_state_dict(checkpoint["optimizer_state_dicts"][i])
 
     # Move the model and the optimizer to the accelerator as well.
     diffusion_model = accelerator.prepare(diffusion_model)
@@ -433,8 +444,9 @@ def main(override=None):
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--config_path", type=str, required=True)
     parser.add_argument("--sample_with_guidance", action="store_true")
-    parser.add_argument("--save_and_sample_every_n", type=int, default=100)
+    parser.add_argument("--save_and_sample_every_n", type=int, default=1000)
     parser.add_argument("--load_model_weights_from_checkpoint", type=str, default="")
+    parser.add_argument("--resume_from", type=str, default="")
     args = parser.parse_args()
 
     train(
@@ -444,6 +456,7 @@ def main(override=None):
         sample_with_guidance=args.sample_with_guidance,
         save_and_sample_every_n=args.save_and_sample_every_n,
         load_model_weights_from_checkpoint=args.load_model_weights_from_checkpoint,
+        resume_from=args.resume_from,
     )
 
 

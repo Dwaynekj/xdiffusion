@@ -24,6 +24,8 @@ diffusion:
       steps: 1000
       # The maximum time
       max_time: 1.0
+      # The distribution for sample times
+      distribution: "logit-normal"
   sde:
     target: xdiffusion.sde.rectified_flow.RectifiedFlow
     params:
