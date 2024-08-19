@@ -75,7 +75,7 @@ The following is a list of the supported image models, their current results, an
 | February 2024 | AnimateLCM | [AnimateLCM: Accelerating the Animation of Personalized Diffusion Models and Adapters with Decoupled Consistency Learning](https://arxiv.org/abs/2402.00769) | | |
 | February 2024 | Video-LaVIT | [Video-LaVIT: Unified Video-Language Pre-training with Decoupled Visual-Motional Tokenization](https://arxiv.org/abs/2402.03161) | | |
 | February 2024 | Snap Video | [Snap Video: Scaled Spatiotemporal Transformers for Text-to-Video Synthesis](https://arxiv.org/abs/2402.14797) | | |
-| February 2024 | SORA | [Video generation models as world simulators](https://openai.com/index/video-generation-models-as-world-simulators/) [alternative](https://arxiv.org/abs/2402.17177)| | |
+| February 2024 | SORA | [Video generation models as world simulators](https://openai.com/index/video-generation-models-as-world-simulators/) [alternative](https://arxiv.org/abs/2402.17177) | [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/video/moving_mnist/sora.yaml) |  ![SORA](https://drive.google.com/uc?export=view&id=1W40uY3xU5F36YTou-RT26Q6YidmrcJsp) | [instructions](https://github.com/swookey-thinky/xdiffusion/blob/main/docs/video/sora.md)
 | April 2024 | TI2V-Zero | [TI2V-Zero: Zero-Shot Image Conditioning for Text-to-Video Diffusion Models](https://arxiv.org/abs/2404.16306) | | |
 | May 2024 | Vidu | [Vidu: a Highly Consistent, Dynamic and Skilled Text-to-Video Generator with Diffusion Models](https://arxiv.org/abs/2405.04233) | | |
 | May 2024 | FIFO-Diffusion | [FIFO-Diffusion: Generating Infinite Videos from Text without Training](https://arxiv.org/abs/2405.11473) | | |
