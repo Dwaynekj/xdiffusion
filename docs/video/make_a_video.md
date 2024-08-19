@@ -24,7 +24,7 @@ that is initialized to the identity function.
 
 ## Configuration File
 
-The configuration file is located in [Make-A-Video](https://github.com/swookey-thinky/video_diffusion/blob/main/configs/moving_mnist/make_a_video.yaml).
+The configuration file is located in [Make-A-Video](https://github.com/swookey-thinky/video_diffusion/blob/main/configs/video/moving_mnist/make_a_video.yaml).
 
 ## Training
 
@@ -34,7 +34,7 @@ Training the Make-A-Video model requires several steps. First, we need a pretrai
 We will use a basic v-prediction, continuous time text to image diffusion model using CLIP embeddings. The configuration for this base image diffusion model is [here](https://github.com/swookey-thinky/video_diffusion/blob/main/configs/moving_mnist/ddpm_32x32_v_continuous_clip.yaml).
 
 ```
-> python training/moving_mnist/train_image.py --config_path configs/moving_mnist/ddpm_32x32_v_continuous_clip.yaml --num_training_steps 20000 --batch_size 128 --save_and_sample_every_n 10000
+> python training/video/moving_mnist/train_image.py --config_path configs/video/moving_mnist/ddpm_32x32_v_continuous_clip.yaml --num_training_steps 20000 --batch_size 128 --save_and_sample_every_n 10000
 ```
 
 The above model was trained for 20k steps on a single T4 instance at batch size 128. The model wasn't fully converged by then but we found the text guidance to be good enough so we left it there. 
@@ -44,7 +44,7 @@ The above model was trained for 20k steps on a single T4 instance at batch size 
 To train the video diffusion model from the pretrained weights in the first step, use:
 
 ```
-> python training/moving_mnist/train.py --config_path configs/moving_mnist/make_a_video.yaml --batch_size 8 --load_model_weights_from_checkpoint output/moving_mnist_image/ddpm_32x32_v_continuous_clip/diffusion-20000.pt --num_training_steps 100000 --save_and_sample_every_n 10000
+> python training/video/moving_mnist/train.py --config_path configs/video/moving_mnist/make_a_video.yaml --batch_size 8 --load_model_weights_from_checkpoint output/moving_mnist_image/ddpm_32x32_v_continuous_clip/diffusion-20000.pt --num_training_steps 100000 --save_and_sample_every_n 10000
 ```
 
 We successfully tested training on a single T4 instance (16GB VRAM) using a batch size of 8.
@@ -54,10 +54,10 @@ We successfully tested training on a single T4 instance (16GB VRAM) using a batc
 To sample from a pretrained checkpoint, you can run:
 
 ```
-> python training/moving_mnist/sample.py --config_path configs/moving_mnist/make_a_video.yaml --num_samples 16 --checkpoint output/moving_mnist/make_a_video/diffusion-100000.pt
+> python training/video/moving_mnist/sample.py --config_path configs/video/moving_mnist/make_a_video.yaml --num_samples 16 --checkpoint output/moving_mnist/make_a_video/diffusion-100000.pt
 ```
 
-Output will be saved to the `output/moving_mnist/sample/make_a_video` directory.
+Output will be saved to the `output/video/moving_mnist/sample/make_a_video` directory.
 
 ## Results and Checkpoints
 

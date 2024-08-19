@@ -20,7 +20,7 @@ The configuration file is located in [Flexible Diffusion Models](https://github.
 To train the video diffusion model, use:
 
 ```
-> python training/moving_mnist/train.py --config_path configs/moving_mnist/flexible_diffusion_models.yaml
+> python training/video/moving_mnist/train.py --config_path configs/video/moving_mnist/flexible_diffusion_models.yaml
 ```
 
 We successfully tested training on a single T4 instance (16GB VRAM) using a batch size of 8.
@@ -45,7 +45,7 @@ However, you can also autoregressively sample arbitrary length videos, using a d
 
 | Config | Checkpoint | Results
 | ------ | ---------- | -------
-| [config](https://github.com/swookey-thinky/video_diffusion/blob/main/configs/moving_mnist/flexible_diffusion_models.yaml) | [google drive](https://drive.google.com/file/d/1rDX-sioy4B3uUFjQfQnmZ5ASzIE7V5gb/view?usp=sharing) | ![Flexible Diffusion Models](https://drive.google.com/uc?export=view&id=1B2raR3_suRf8qAUP4jzi8YIwka-UHwrU)
+| [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/video/moving_mnist/flexible_diffusion_models.yaml) | [google drive](https://drive.google.com/file/d/1rDX-sioy4B3uUFjQfQnmZ5ASzIE7V5gb/view?usp=sharing) | ![Flexible Diffusion Models](https://drive.google.com/uc?export=view&id=1B2raR3_suRf8qAUP4jzi8YIwka-UHwrU)
 
 ## Other Resources
 
