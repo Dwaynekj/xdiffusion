@@ -33,6 +33,8 @@ The following is a list of the supported image models, their current results, an
 
 | Date  | Name  | Paper | Config | Results | Instructions
 | :---- | :---- | ----- | ------ | ----- | -----
+| August 2024 | Flux | [Flux Announcement](https://blackforestlabs.ai/announcing-black-forest-labs/) | [config]()| ![Flux](https://drive.google.com/uc?export=view&id=1_r8poe1SJxf8UtT4mmQaTT378m26hD-F)
+ | [instructions](https://github.com/swookey-thinky/xdiffusion/blob/main/docs/image/flux.md)
 
 ## Video Diffusion
 
