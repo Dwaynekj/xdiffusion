@@ -10,7 +10,13 @@ from xdiffusion.utils import freeze, prob_mask_like
 from xdiffusion.layers.attention import AttentionPooling
 from xdiffusion.layers.clip import FrozenCLIPTextEmbedder
 from xdiffusion.layers.mlp import Mlp
-from xdiffusion.layers.utils import ContextBlock, Format, nchw_to, to_2tuple
+from xdiffusion.layers.utils import (
+    ContextBlock,
+    Format,
+    nchw_to,
+    to_2tuple,
+    timestep_embedding,
+)
 
 try:
     from torch import _assert
@@ -316,7 +322,7 @@ class DiTTimestepEmbedding(torch.nn.Module):
         self.frequency_embedding_size = frequency_embedding_size
 
     def forward(self, timestep: torch.Tensor, **kwargs):
-        t_freq = self.timestep_embedding(timestep, self.frequency_embedding_size)
+        t_freq = timestep_embedding(timestep, self.frequency_embedding_size)
         t_emb = self.mlp(t_freq)
         return t_emb
 
@@ -324,31 +330,6 @@ class DiTTimestepEmbedding(torch.nn.Module):
         # Initialize timestep embedding MLP:
         torch.nn.init.normal_(self.mlp[0].weight, std=0.02)
         torch.nn.init.normal_(self.mlp[2].weight, std=0.02)
-
-    @staticmethod
-    def timestep_embedding(t, dim, max_period=10000):
-        """
-        Create sinusoidal timestep embeddings.
-        :param t: a 1-D Tensor of N indices, one per batch element.
-                          These may be fractional.
-        :param dim: the dimension of the output.
-        :param max_period: controls the minimum frequency of the embeddings.
-        :return: an (N, D) Tensor of positional embeddings.
-        """
-        # https://github.com/openai/glide-text2im/blob/main/glide_text2im/nn.py
-        half = dim // 2
-        freqs = torch.exp(
-            -math.log(max_period)
-            * torch.arange(start=0, end=half, dtype=torch.float32)
-            / half
-        ).to(device=t.device)
-        args = t[:, None].float() * freqs[None]
-        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
-        if dim % 2:
-            embedding = torch.cat(
-                [embedding, torch.zeros_like(embedding[:, :1])], dim=-1
-            )
-        return embedding
 
 
 class DiTLabelEmbedding(torch.nn.Module):
@@ -605,3 +586,125 @@ class T5TextEmbedder(torch.nn.Module):
         context[self.context_key] = outputs
         context["text_attention_mask"] = attention_mask.to(device)
         return context
+
+
+class Timesteps(torch.nn.Module):
+    def __init__(
+        self,
+        num_channels: int,
+    ):
+        super().__init__()
+        self.num_channels = num_channels
+
+    def forward(self, timesteps):
+        t_emb = timestep_embedding(
+            timesteps,
+            self.num_channels,
+        )
+        return t_emb
+
+
+class TimestepEmbedding(torch.nn.Module):
+    def __init__(
+        self,
+        in_channels: int,
+        time_embed_dim: int,
+        act_fn: str = "silu",
+        out_dim: int = None,
+        post_act_fn: Optional[str] = None,
+        cond_proj_dim=None,
+        sample_proj_bias=True,
+    ):
+        super().__init__()
+
+        assert act_fn == "silu"
+        self.linear_1 = torch.nn.Linear(in_channels, time_embed_dim, sample_proj_bias)
+
+        if cond_proj_dim is not None:
+            self.cond_proj = torch.nn.Linear(cond_proj_dim, in_channels, bias=False)
+        else:
+            self.cond_proj = None
+
+        self.act = torch.nn.SiLU()
+
+        if out_dim is not None:
+            time_embed_dim_out = out_dim
+        else:
+            time_embed_dim_out = time_embed_dim
+        self.linear_2 = torch.nn.Linear(
+            time_embed_dim, time_embed_dim_out, sample_proj_bias
+        )
+
+        if post_act_fn is None:
+            self.post_act = None
+        else:
+            assert post_act_fn == "silu"
+            self.post_act = torch.nn.SiLU()
+
+    def forward(self, sample, condition=None):
+        if condition is not None:
+            sample = sample + self.cond_proj(condition)
+        sample = self.linear_1(sample)
+
+        if self.act is not None:
+            sample = self.act(sample)
+
+        sample = self.linear_2(sample)
+
+        if self.post_act is not None:
+            sample = self.post_act(sample)
+        return sample
+
+
+class PixArtAlphaTextProjection(torch.nn.Module):
+    """
+    Projects caption embeddings
+
+    Adapted from https://github.com/PixArt-alpha/PixArt-alpha/blob/master/diffusion/model/nets/PixArt_blocks.py
+    """
+
+    def __init__(self, in_features, hidden_size, out_features=None, act_fn="gelu_tanh"):
+        super().__init__()
+        if out_features is None:
+            out_features = hidden_size
+        self.linear_1 = torch.nn.Linear(
+            in_features=in_features, out_features=hidden_size, bias=True
+        )
+        if act_fn == "gelu_tanh":
+            self.act_1 = torch.nn.GELU(approximate="tanh")
+        elif act_fn == "silu":
+            self.act_1 = torch.nn.SiLU()
+        else:
+            raise ValueError(f"Unknown activation function: {act_fn}")
+        self.linear_2 = torch.nn.Linear(
+            in_features=hidden_size, out_features=out_features, bias=True
+        )
+
+    def forward(self, caption):
+        hidden_states = self.linear_1(caption)
+        hidden_states = self.act_1(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
+
+
+class CombinedTimestepTextProjEmbeddings(torch.nn.Module):
+    def __init__(self, embedding_dim, pooled_projection_dim):
+        super().__init__()
+
+        self.time_proj = Timesteps(num_channels=256)
+        self.timestep_embedder = TimestepEmbedding(
+            in_channels=256, time_embed_dim=embedding_dim
+        )
+        self.text_embedder = PixArtAlphaTextProjection(
+            pooled_projection_dim, embedding_dim, act_fn="silu"
+        )
+
+    def forward(self, timestep, pooled_projection):
+        timesteps_proj = self.time_proj(timestep)
+        timesteps_emb = self.timestep_embedder(
+            timesteps_proj.to(dtype=pooled_projection.dtype)
+        )  # (N, D)
+
+        pooled_projections = self.text_embedder(pooled_projection)
+        conditioning = timesteps_emb + pooled_projections
+        return conditioning

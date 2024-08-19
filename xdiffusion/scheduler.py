@@ -7,6 +7,7 @@ across diffusion model implementations.
 from abc import abstractmethod
 import numpy as np
 import torch
+from torch.distributions import LogisticNormal
 from typing import Dict, Tuple
 
 from xdiffusion.utils import (
@@ -575,12 +576,35 @@ class DiscreteRectifiedFlowNoiseScheduler(torch.nn.Module):
         self._max_time = max_time
         self._steps = steps
 
+        distribution = "uniform-clipped"
+        if "distribution" in kwargs:
+            distribution = kwargs["distribution"]
+        assert distribution in ["uniform", "uniform-clipped", "logit-normal"]
+
+        if distribution == "uniform":
+            self._sample_t = torch.rand
+            self._epsilon = 0.0
+        elif distribution == "uniform-clipped":
+            self._sample_t = torch.rand
+        else:
+            assert distribution == "logit-normal"
+            print("Using logit-normal rectified flow scheduler.")
+            loc = 0.0
+            scale = 1.0
+            self.distribution = LogisticNormal(
+                torch.tensor([loc]), torch.tensor([scale])
+            )
+            self._sample_t = lambda batch_size, device: self.distribution.sample(
+                (batch_size,)
+            )[:, 0].to(device)
+            self._epsilon = 0.0
+
     def sample_random_times(
         self, batch_size, device
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # Rectified flow time is in the range (eps, 1.0 - eps)
         t = (
-            torch.rand(batch_size, device=device) * (self._max_time - self._epsilon)
+            self._sample_t(batch_size, device=device) * (self._max_time - self._epsilon)
             + self._epsilon
         )
         return t, torch.ones_like(t)

@@ -158,7 +158,12 @@ to_ntuple = _ntuple
 
 # https://github.com/facebookresearch/mae/blob/main/util/pos_embed.py
 def get_2d_sincos_pos_embed(
-    embed_dim, grid_size, cls_token=False, extra_tokens=0, lewei_scale=1.0, base_size=16
+    embed_dim,
+    grid_size,
+    cls_token=False,
+    extra_tokens=0,
+    lewei_scale=1.0,
+    base_size=16,
 ):
     """
     grid_size: int of the grid height and width
@@ -167,6 +172,7 @@ def get_2d_sincos_pos_embed(
     """
     if isinstance(grid_size, int):
         grid_size = to_2tuple(grid_size)
+
     grid_h = (
         np.arange(grid_size[0], dtype=np.float32)
         / (grid_size[0] / base_size)
@@ -284,3 +290,16 @@ def drop_path(
     if keep_prob > 0.0 and scale_by_keep:
         random_tensor.div_(keep_prob)
     return x * random_tensor
+
+
+class RMSNorm(torch.nn.Module):
+    def __init__(self, dim: int, eps: float = 1e-6):
+        super().__init__()
+        self.scale = torch.nn.Parameter(torch.ones(dim))
+        self.eps = eps
+
+    def forward(self, x: torch.Tensor):
+        x_dtype = x.dtype
+        x = x.float()
+        rrms = torch.rsqrt(torch.mean(x**2, dim=-1, keepdim=True) + self.eps)
+        return (x * rrms).to(dtype=x_dtype) * self.scale

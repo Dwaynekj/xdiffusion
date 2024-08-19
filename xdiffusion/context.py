@@ -15,8 +15,13 @@ image_imbeddings
 
 from abc import abstractmethod
 import torch
-from transformers import T5Tokenizer
-from typing import Dict
+from transformers import (
+    AutoTokenizer,
+    T5Tokenizer,
+    T5EncoderModel,
+    CLIPTextModelWithProjection,
+)
+from typing import Dict, List, Optional, Union
 
 from xdiffusion.layers.clip import FrozenCLIPTextTokenizer
 from xdiffusion.tokenizer.bpe import get_encoder
@@ -76,7 +81,7 @@ class TextEmbeddingsAdapter(torch.nn.Module):
         swap_context_channels: bool = False,
         input_projection_dim: int = -1,
         output_projection_dim: int = -1,
-        **kwargs
+        **kwargs,
     ):
         super().__init__()
         self._swap_context_channels = swap_context_channels
@@ -208,3 +213,211 @@ class T5TextPromptsPreprocessor(torch.nn.Module):
                 text_inputs_on_device[k] = v.detach().to(device)
             context["text_tokens"] = text_inputs_on_device
         return context
+
+
+class SD3TextPromptsPreprocessor(torch.nn.Module):
+    def __init__(
+        self,
+        first_clip_model_name: str,
+        first_clip_max_length: int,
+        second_clip_model_name: str,
+        second_clip_max_length: int,
+        t5_model_name: str,
+        t5_max_length: int,
+    ):
+        super().__init__()
+
+        self._clip_tokenizer_1 = AutoTokenizer.from_pretrained(first_clip_model_name)
+        self._clip_tokenizer_2 = AutoTokenizer.from_pretrained(second_clip_model_name)
+        self._t5_tokenizer = AutoTokenizer.from_pretrained(t5_model_name)
+        self._clip_encoder_1 = CLIPTextModelWithProjection.from_pretrained(
+            first_clip_model_name
+        )
+        self._clip_encoder_2 = CLIPTextModelWithProjection.from_pretrained(
+            second_clip_model_name
+        )
+        self._t5_encoder = T5EncoderModel.from_pretrained(t5_model_name)
+        self._clip_tokenizer_1_max_length = first_clip_max_length
+        self._clip_tokenizer_2_max_length = second_clip_max_length
+        self._t5_max_length = t5_max_length
+
+    def forward(self, context: Dict, device, **kwargs):
+        if "text_prompts" in context:
+            prompts = context["text_prompts"]
+            with torch.no_grad():
+                prompt_embeds_1, pooled_prompt_embeds_1 = self._get_clip_prompt_embeds(
+                    prompt=prompts,
+                    clip_encoder=self._clip_encoder_1,
+                    clip_tokenizer=self._clip_tokenizer_1,
+                    max_length=self._clip_tokenizer_1_max_length,
+                    device=device,
+                )
+                prompt_embeds_2, pooled_prompt_embeds_2 = self._get_clip_prompt_embeds(
+                    prompt=prompts,
+                    clip_encoder=self._clip_encoder_2,
+                    clip_tokenizer=self._clip_tokenizer_2,
+                    max_length=self._clip_tokenizer_2_max_length,
+                    device=device,
+                )
+
+                t5_prompt_embed = self._get_t5_prompt_embeds(
+                    prompt=prompts,
+                    max_sequence_length=self._t5_max_length,
+                    device=device,
+                    t5_tokenizer=self._t5_tokenizer,
+                    t5_encoder=self._t5_encoder,
+                )
+                # Concatenate the CLIP prompt embeddings
+                # "We also concatenate the penultimate hidden representations channel-wise to a CLIP
+                # context conditioning c^CLIP_txt ∈ R^77×2048"
+                clip_prompt_embeds = torch.cat(
+                    [prompt_embeds_1, prompt_embeds_2], dim=-1
+                )
+
+                # Pad the CLIP prompt embeddings to the T5 prompt embeddings
+                # "Finally, we zero-pad c^CLIP_txt along the channel axis to 4096 dimensions
+                # to match the T5 representation"
+                if t5_prompt_embed.shape[-1] > clip_prompt_embeds.shape[-1]:
+                    clip_prompt_embeds = torch.nn.functional.pad(
+                        clip_prompt_embeds,
+                        (0, t5_prompt_embed.shape[-1] - clip_prompt_embeds.shape[-1]),
+                    )
+                elif clip_prompt_embeds.shape[-1] > t5_prompt_embed.shape[-1]:
+                    t5_prompt_embed = torch.nn.functional.pad(
+                        t5_prompt_embed,
+                        (0, clip_prompt_embeds.shape[-1] - t5_prompt_embed.shape[-1]),
+                    )
+
+                # Concatentate the CLIP and T5 text embeddings
+                # "and concatenate it along the sequence axis with c^T5_txt
+                # to obtain the final context representation c_txt ∈ R^154×4096"
+                prompt_embeds = torch.cat([clip_prompt_embeds, t5_prompt_embed], dim=-2)
+
+                # Concatenate the Pooled CLIP prompt embeddings
+                # "We concatenate the pooled outputs, of sizes 768 and 1280 respectively, to obtain
+                # a vector conditioning c_vec ∈ R^2048"
+                pooled_prompt_embeds = torch.cat(
+                    [pooled_prompt_embeds_1, pooled_prompt_embeds_2], dim=-1
+                )
+            context["text_embeddings"] = prompt_embeds.detach().to(device)
+            context["pooled_text_embeddings"] = pooled_prompt_embeds.detach().to(device)
+        return context
+
+    def _get_clip_prompt_embeds(
+        self,
+        prompt: Union[str, List[str]],
+        clip_encoder: CLIPTextModelWithProjection,
+        clip_tokenizer: AutoTokenizer,
+        max_length: int,
+        num_images_per_prompt: int = 1,
+        device: Optional[torch.device] = None,
+    ):
+        prompt = [prompt] if isinstance(prompt, str) else prompt
+        batch_size = len(prompt)
+
+        text_inputs = clip_tokenizer(
+            prompt,
+            padding="max_length",
+            max_length=max_length,
+            truncation=True,
+            return_tensors="pt",
+        )
+
+        text_input_ids = text_inputs.input_ids
+        untruncated_ids = clip_tokenizer(
+            prompt, padding="longest", return_tensors="pt"
+        ).input_ids
+
+        if untruncated_ids.shape[-1] >= text_input_ids.shape[-1] and not torch.equal(
+            text_input_ids, untruncated_ids
+        ):
+            removed_text = clip_tokenizer.batch_decode(
+                untruncated_ids[:, self.tokenizer_max_length - 1 : -1]
+            )
+            print(
+                "The following part of your input was truncated because CLIP can only handle sequences up to"
+                f" {self.tokenizer_max_length} tokens: {removed_text}"
+            )
+
+        clip_encoder_device = clip_encoder.device
+        clip_encoder = clip_encoder.to(device)
+        prompt_embeds = clip_encoder(
+            text_input_ids.to(device), output_hidden_states=True
+        )
+        clip_encoder = clip_encoder.to(clip_encoder_device)
+
+        pooled_prompt_embeds = prompt_embeds[0]
+        prompt_embeds = prompt_embeds.hidden_states[-2]
+        prompt_embeds = prompt_embeds.to(dtype=clip_encoder.dtype, device=device)
+
+        _, seq_len, _ = prompt_embeds.shape
+
+        # duplicate text embeddings for each generation per prompt, using mps friendly method
+        prompt_embeds = prompt_embeds.repeat(1, num_images_per_prompt, 1)
+        prompt_embeds = prompt_embeds.view(
+            batch_size * num_images_per_prompt, seq_len, -1
+        )
+
+        pooled_prompt_embeds = pooled_prompt_embeds.repeat(1, num_images_per_prompt, 1)
+        pooled_prompt_embeds = pooled_prompt_embeds.view(
+            batch_size * num_images_per_prompt, -1
+        )
+
+        return prompt_embeds, pooled_prompt_embeds
+
+    def _get_t5_prompt_embeds(
+        self,
+        t5_tokenizer: AutoTokenizer,
+        t5_encoder: T5EncoderModel,
+        device: Optional[torch.device],
+        prompt: Union[str, List[str]] = None,
+        num_images_per_prompt: int = 1,
+        max_sequence_length: int = 256,
+        dtype: Optional[torch.dtype] = None,
+    ):
+        dtype = dtype or t5_encoder.dtype
+
+        prompt = [prompt] if isinstance(prompt, str) else prompt
+        batch_size = len(prompt)
+
+        text_inputs = t5_tokenizer(
+            prompt,
+            padding="max_length",
+            max_length=max_sequence_length,
+            truncation=True,
+            add_special_tokens=True,
+            return_tensors="pt",
+        )
+        text_input_ids = text_inputs.input_ids
+        untruncated_ids = t5_tokenizer(
+            prompt, padding="longest", return_tensors="pt"
+        ).input_ids
+
+        if untruncated_ids.shape[-1] >= text_input_ids.shape[-1] and not torch.equal(
+            text_input_ids, untruncated_ids
+        ):
+            removed_text = t5_tokenizer.batch_decode(
+                untruncated_ids[:, self.tokenizer_max_length - 1 : -1]
+            )
+            print(
+                "The following part of your input was truncated because `max_sequence_length` is set to "
+                f" {max_sequence_length} tokens: {removed_text}"
+            )
+
+        t5_device = t5_encoder.device
+        t5_encoder = t5_encoder.to(device)
+        prompt_embeds = t5_encoder(text_input_ids.to(device))[0]
+        t5_encoder = t5_encoder.to(t5_device)
+
+        dtype = t5_encoder.dtype
+        prompt_embeds = prompt_embeds.to(dtype=dtype, device=device)
+
+        _, seq_len, _ = prompt_embeds.shape
+
+        # duplicate text embeddings and attention mask for each generation per prompt, using mps friendly method
+        prompt_embeds = prompt_embeds.repeat(1, num_images_per_prompt, 1)
+        prompt_embeds = prompt_embeds.view(
+            batch_size * num_images_per_prompt, seq_len, -1
+        )
+
+        return prompt_embeds

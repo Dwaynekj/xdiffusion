@@ -67,7 +67,20 @@ class SamplingSchemeBase:
         if self.B is not None:
             obs_frame_indices = [obs_frame_indices] * self.B
             latent_frame_indices = [latent_frame_indices] * self.B
-        return obs_frame_indices, latent_frame_indices
+
+        # Generate the boolean temporal frame masks. True indicates latent frames,
+        # False indicates observed frames, of shape (B,T)
+        temporal_mask = torch.ones(
+            (len(obs_frame_indices), self._max_frames), dtype=torch.bool
+        )
+        for batch_idx in range(len(obs_frame_indices)):
+            for frame_idx in obs_frame_indices[batch_idx]:
+                # Convert from absolute frame index to relative
+                frame_idx = frame_idx - (self._step_size) * (self._current_step - 1)
+
+                assert frame_idx >= 0 and frame_idx < self._max_frames
+                temporal_mask[batch_idx][frame_idx] = False
+        return obs_frame_indices, latent_frame_indices, temporal_mask
 
     def is_done(self):
         return len(self._done_frames) >= self._video_length
@@ -109,4 +122,5 @@ class Autoregressive(SamplingSchemeBase):
         latent_frame_indices = list(
             range(first_idx, min(first_idx + self._step_size, self._video_length))
         )
+
         return obs_frame_indices, latent_frame_indices

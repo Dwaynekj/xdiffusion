@@ -148,6 +148,13 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         # Calculate forward process q_t
         x_t = self._noise_scheduler.q_sample(x_start=x_0, t=t, noise=epsilon)
 
+        # If there is a mask in the context, then we need to only select
+        # the elements of x_t that are unmasked, the others remain x_0.
+        # A zero is the mask means use x_0, otherwise use x_t
+        if "video_mask" in context:
+            # video_mask is (B,T)
+            x_t = torch.where(context["video_mask"][:, None, :, None, None], x_t, x_0)
+
         # Perform classifier free guidance over the context. This means
         # jointly train a conditional and unconditional model.
         if self._unconditional_guidance_probability > 0.0:
@@ -766,12 +773,19 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         device = next(self.parameters()).device
 
         # Initial image is pure noise
-        x_t = (
-            torch.randn(shape, device=device)
-            if initial_noise is None
-            else initial_noise
-        )
+        if initial_noise is not None:
+            x_t = initial_noise
+        else:
+            x_t = torch.randn(shape, device=device)
 
+            # If there is a video mask, make to sure add in the unmasked
+            # frames from the original conditioning. A mask value of 1 means generate,
+            # a mask value of 0 means use the conditioning
+            if "video_mask" in context:
+                assert "x0" in context
+                x_t = torch.where(
+                    context["video_mask"][:, None, :, None, None], x_t, context["x0"]
+                )
         intermediate_outputs = []
 
         if save_intermediate_outputs:

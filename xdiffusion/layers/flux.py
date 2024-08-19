@@ -5,6 +5,8 @@ import torch
 from einops import rearrange
 from torch import Tensor, nn
 
+from xdiffusion.layers.utils import RMSNorm
+
 
 def attention(q: Tensor, k: Tensor, v: Tensor, pe: Tensor) -> Tensor:
     q, k = apply_rope(q, k, pe)
@@ -87,18 +89,6 @@ class MLPEmbedder(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         return self.out_layer(self.silu(self.in_layer(x)))
-
-
-class RMSNorm(torch.nn.Module):
-    def __init__(self, dim: int):
-        super().__init__()
-        self.scale = nn.Parameter(torch.ones(dim))
-
-    def forward(self, x: Tensor):
-        x_dtype = x.dtype
-        x = x.float()
-        rrms = torch.rsqrt(torch.mean(x**2, dim=-1, keepdim=True) + 1e-6)
-        return (x * rrms).to(dtype=x_dtype) * self.scale
 
 
 class QKNorm(torch.nn.Module):
@@ -195,6 +185,15 @@ class DoubleStreamBlock(nn.Module):
     def forward(
         self, img: Tensor, txt: Tensor, vec: Tensor, pe: Tensor
     ) -> tuple[Tensor, Tensor]:
+        """Forward pass of block.
+
+        Args:
+            img: Tensor batch of noised image (B, L, D)
+            txt: Tensor batch of text embeddings (B, L, D)
+            vec: Tensor batch of timestep (and other) embeddings (B, L, D)
+            pe: Tensor batch of positional encodings (B, L, D)
+        """
+        # Separate moduation for text and image pathways
         img_mod1, img_mod2 = self.img_mod(vec)
         txt_mod1, txt_mod2 = self.txt_mod(vec)
 
@@ -205,6 +204,7 @@ class DoubleStreamBlock(nn.Module):
         img_q, img_k, img_v = rearrange(
             img_qkv, "B L (K H D) -> K B H L D", K=3, H=self.num_heads
         )
+        # QK normalization, per https://arxiv.org/abs/2302.05442
         img_q, img_k = self.img_attn.norm(img_q, img_k, img_v)
 
         # prepare txt for attention
@@ -214,6 +214,7 @@ class DoubleStreamBlock(nn.Module):
         txt_q, txt_k, txt_v = rearrange(
             txt_qkv, "B L (K H D) -> K B H L D", K=3, H=self.num_heads
         )
+        # QK normalization, per https://arxiv.org/abs/2302.05442
         txt_q, txt_k = self.txt_attn.norm(txt_q, txt_k, txt_v)
 
         # run actual attention
@@ -224,13 +225,17 @@ class DoubleStreamBlock(nn.Module):
         attn = attention(q, k, v, pe=pe)
         txt_attn, img_attn = attn[:, : txt.shape[1]], attn[:, txt.shape[1] :]
 
-        # calculate the img bloks
+        # calculate the img bloks. Note this is NOT using the parallel
+        # attention layers from https://arxiv.org/abs/2302.05442, but rather
+        # the standard MMDiT calculation from https://arxiv.org/abs/2403.03206.
         img = img + img_mod1.gate * self.img_attn.proj(img_attn)
         img = img + img_mod2.gate * self.img_mlp(
             (1 + img_mod2.scale) * self.img_norm2(img) + img_mod2.shift
         )
 
-        # calculate the txt bloks
+        # calculate the txt bloks. Note this is NOT using the parallel
+        # attention layers from https://arxiv.org/abs/2302.05442, but rather
+        # the standard MMDiT calculation from https://arxiv.org/abs/2403.03206.
         txt = txt + txt_mod1.gate * self.txt_attn.proj(txt_attn)
         txt = txt + txt_mod2.gate * self.txt_mlp(
             (1 + txt_mod2.scale) * self.txt_norm2(txt) + txt_mod2.shift
@@ -272,6 +277,13 @@ class SingleStreamBlock(nn.Module):
         self.modulation = Modulation(hidden_size, double=False)
 
     def forward(self, x: Tensor, vec: Tensor, pe: Tensor) -> Tensor:
+        """Forward pass of block.
+
+        Args:
+            img: Tensor batch of noised image (B, L, D)
+            vec: Tensor batch of timestep (and other) embeddings (B, L, D)
+            pe: Tensor batch of positional encodings (B, L, D)
+        """
         mod, _ = self.modulation(vec)
         x_mod = (1 + mod.scale) * self.pre_norm(x) + mod.shift
         qkv, mlp = torch.split(
@@ -284,6 +296,7 @@ class SingleStreamBlock(nn.Module):
         # compute attention
         attn = attention(q, k, v, pe=pe)
         # compute activation in mlp stream, cat again and run second linear layer
+        # This is the parallel attention/MLP layers from https://arxiv.org/abs/2302.05442.
         output = self.linear2(torch.cat((attn, self.mlp_act(mlp)), 2))
         return x + mod.gate * output
 
