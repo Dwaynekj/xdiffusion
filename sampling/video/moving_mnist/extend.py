@@ -4,28 +4,23 @@ import math
 import os
 from pathlib import Path
 import torch
-from torch.optim import Adam
 from torch.utils.data import DataLoader
-from torchinfo import summary
-from torchvision import transforms, utils
-from torchvision.datasets import MNIST
+from torchvision import utils
 from torchvision.transforms import v2
-from tqdm import tqdm
-from typing import List, Optional
+from typing import List
 
-from video_diffusion.datasets.moving_mnist import MovingMNIST
-from video_diffusion.diffusion import DiffusionModel
-from video_diffusion.ddpm import GaussianDiffusion_DDPM
-from video_diffusion.samplers import ddim, ancestral, base
-from video_diffusion.utils import (
-    cycle,
+from xdiffusion.datasets.moving_mnist import MovingMNIST
+from xdiffusion.diffusion import DiffusionModel
+from xdiffusion.ddpm import GaussianDiffusion_DDPM
+from xdiffusion.samplers import ddim, ancestral, base
+from xdiffusion.utils import (
     load_yaml,
     DotConfig,
     normalize_to_neg_one_to_one,
     video_tensor_to_gif,
 )
 
-OUTPUT_NAME = "output/moving_mnist/extend"
+OUTPUT_NAME = "output/video/moving_mnist/extend"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 

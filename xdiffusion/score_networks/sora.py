@@ -97,6 +97,7 @@ class STDiT3Block(nn.Module):
         t0=None,  # t with timestamp=0
         T=None,  # number of frames
         S=None,  # number of pixel patches
+        joint_attention_mask=None,
     ):
         """Block forward.
 
@@ -137,11 +138,11 @@ class STDiT3Block(nn.Module):
         # Attention (spatial or temporal)
         if self.temporal:
             x_m = rearrange(x_m, "B (T S) C -> (B S) T C", T=T, S=S)
-            x_m = self.attn(x_m)
+            x_m = self.attn(x_m, joint_attention_mask=joint_attention_mask)
             x_m = rearrange(x_m, "(B S) T C -> B (T S) C", T=T, S=S)
         else:
             x_m = rearrange(x_m, "B (T S) C -> (B T) S C", T=T, S=S)
-            x_m = self.attn(x_m)
+            x_m = self.attn(x_m, joint_attention_mask=joint_attention_mask)
             x_m = rearrange(x_m, "(B T) S C -> B (T S) C", T=T, S=S)
 
         # Masked modulation (attention)
@@ -355,11 +356,26 @@ class Sora(torch.nn.Module):
         # === get pos embed ===
         _, _, Tx, Hx, Wx = x.size()
         T, H, W = self.get_dynamic_size(x)
+        S = H * W
+
+        joint_attention_mask = None
+        if "is_image_batch" in context and context["is_image_batch"]:
+            # The joint training mask tells us which frames are temporally
+            # coherent video frames, and which frames are independent
+            # images.
+            joint_training_mask = torch.zeros(
+                (B * S, self.num_heads, T, T), dtype=torch.bool, device=x.device
+            )
+            # Make sure the diagonal is all true (self attend)
+            joint_training_mask[:, :, range(T), range(T)] = True
+            joint_attention_mask = torch.where(joint_training_mask, 0, float("-inf"))
+
+            # The temporal frame mask should also be unset
+            x_mask = None
 
         height = torch.ones(size=(B,), dtype=torch.long) * Hx
         width = torch.ones(size=(B,), dtype=torch.long) * Wx
 
-        S = H * W
         base_size = round(S**0.5)
         resolution_sq = (height[0].item() * width[0].item()) ** 0.5
         scale = resolution_sq / self.input_sq_size
@@ -402,7 +418,17 @@ class Sora(torch.nn.Module):
             self.spatial_blocks, self.temporal_blocks
         ):
             x = spatial_block(x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S)
-            x = temporal_block(x, y, t_mlp, y_lens, x_mask, t0_mlp, T, S)
+            x = temporal_block(
+                x,
+                y,
+                t_mlp,
+                y_lens,
+                x_mask,
+                t0_mlp,
+                T,
+                S,
+                joint_attention_mask=joint_attention_mask,
+            )
 
         # === final layer ===
         x = self.final_layer(x, t, x_mask, t0, T, S)

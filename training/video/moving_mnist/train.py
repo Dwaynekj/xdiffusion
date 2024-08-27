@@ -21,7 +21,7 @@ from xdiffusion.ddpm import GaussianDiffusion_DDPM
 from xdiffusion.cascade import GaussianDiffusionCascade
 from xdiffusion.diffusion import DiffusionModel
 from xdiffusion.datasets.moving_mnist import MovingMNIST
-from xdiffusion.training_utils import preprocess_training_videos
+from xdiffusion.training_utils import get_training_batch, preprocess_training_videos
 from xdiffusion import masking
 
 OUTPUT_NAME = "output/video/moving_mnist"
@@ -36,6 +36,7 @@ def train(
     load_model_weights_from_checkpoint: str,
     resume_from: str,
     sample_with_guidance: bool = False,
+    joint_image_video_training_step: int = -1,
 ):
     global OUTPUT_NAME
     OUTPUT_NAME = f"{OUTPUT_NAME}/{str(Path(config_path).stem)}"
@@ -163,8 +164,16 @@ def train(
         while step < num_training_steps:
             # The dataset has videos and classes. Let's use the classes,
             # and convert them into a fixed embedding space.
-            source_videos, labels = next(dataloader)
+            is_image_batch = (
+                joint_image_video_training_step > 1
+                and (step % joint_image_video_training_step) == 0
+            )
+            source_videos, labels = get_training_batch(
+                dataloader,
+                is_image_batch=is_image_batch,
+            )
             context = {"labels": labels}
+            context["is_image_batch"] = is_image_batch
 
             # Convert the labels to text prompts
             text_prompts = convert_labels_to_prompts(labels)
@@ -196,8 +205,17 @@ def train(
                     config=config_for_layer,
                     context=context_for_layer,
                     mask_generator=mask_generator,
+                    batch_size=batch_size,
+                    is_image_batch=is_image_batch,
                 )
                 context_for_layer["video_mask"] = mask_for_layer
+
+                # Make sure the text prompts are are the same length as the batch size
+                # after preprocessing
+                if len(context["text_prompts"]) > videos_for_layer.shape[0]:
+                    context["text_prompts"] = context["text_prompts"][
+                        : videos_for_layer.shape[0]
+                    ]
 
                 if "super_resolution" in config_for_layer:
                     context_for_layer = _add_low_resolution_context(
@@ -520,6 +538,7 @@ def main(override=None):
     parser.add_argument("--save_and_sample_every_n", type=int, default=10000)
     parser.add_argument("--load_model_weights_from_checkpoint", type=str, default="")
     parser.add_argument("--resume_from", type=str, default="")
+    parser.add_argument("--joint_image_video_training_step", type=int, default=-1)
     args = parser.parse_args()
 
     train(
@@ -529,6 +548,7 @@ def main(override=None):
         save_and_sample_every_n=args.save_and_sample_every_n,
         load_model_weights_from_checkpoint=args.load_model_weights_from_checkpoint,
         resume_from=args.resume_from,
+        joint_image_video_training_step=args.joint_image_video_training_step,
     )
 
 

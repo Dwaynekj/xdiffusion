@@ -778,14 +778,6 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         else:
             x_t = torch.randn(shape, device=device)
 
-            # If there is a video mask, make to sure add in the unmasked
-            # frames from the original conditioning. A mask value of 1 means generate,
-            # a mask value of 0 means use the conditioning
-            if "video_mask" in context:
-                assert "x0" in context
-                x_t = torch.where(
-                    context["video_mask"][:, None, :, None, None], x_t, context["x0"]
-                )
         intermediate_outputs = []
 
         if save_intermediate_outputs:
@@ -833,6 +825,15 @@ class GaussianDiffusion_DDPM(DiffusionModel):
             if unconditional_context_for_timestep is not None:
                 unconditional_context_for_timestep["timestep"] = t
 
+            # If there is a video mask, make to sure add in the unmasked
+            # frames from the original conditioning. A mask value of 1 means generate,
+            # a mask value of 0 means use the conditioning
+            if "video_mask" in context:
+                assert "x0" in context
+                x_t = torch.where(
+                    context["video_mask"][:, None, :, None, None], x_t, context["x0"]
+                )
+
             x_t_minus_1 = sampler.p_sample(
                 x_t,
                 context=context_for_timestep,
@@ -842,6 +843,11 @@ class GaussianDiffusion_DDPM(DiffusionModel):
                 classifier_free_guidance=classifier_free_guidance,
             )
             x_t = x_t_minus_1
+
+            if "video_mask" in context:
+                x_t = torch.where(
+                    context["video_mask"][:, None, :, None, None], x_t, context["x0"]
+                )
 
             if save_intermediate_outputs:
                 intermediate_outputs.append(unnormalize_to_zero_to_one(x_t))

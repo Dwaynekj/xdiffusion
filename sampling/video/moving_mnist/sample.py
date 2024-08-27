@@ -4,21 +4,13 @@ import math
 import os
 from pathlib import Path
 import torch
-from torch.optim import Adam
-from torch.utils.data import DataLoader
-from torchinfo import summary
-from torchvision import transforms, utils
-from torchvision.datasets import MNIST
-from torchvision.transforms import v2
-from tqdm import tqdm
+from torchvision import utils
 from typing import List, Optional
 
-from video_diffusion.datasets.moving_mnist import MovingMNIST
-from video_diffusion.diffusion import DiffusionModel
-from video_diffusion.ddpm import GaussianDiffusion_DDPM
-from video_diffusion.samplers import ddim, ancestral, base, schemes
-from video_diffusion.utils import (
-    cycle,
+from xdiffusion.diffusion import DiffusionModel
+from xdiffusion.ddpm import GaussianDiffusion_DDPM
+from xdiffusion.samplers import ddim, ancestral, rectified_flow, base, schemes
+from xdiffusion.utils import (
     instantiate_from_config,
     load_yaml,
     DotConfig,
@@ -26,7 +18,7 @@ from video_diffusion.utils import (
     video_tensor_to_gif,
 )
 
-OUTPUT_NAME = "output/moving_mnist/sample"
+OUTPUT_NAME = "output/video/moving_mnist/sample"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
@@ -71,6 +63,8 @@ def sample_model(
         sampler = ddim.DDIMSampler()
     elif sampler == "ancestral":
         sampler = ancestral.AncestralSampler()
+    elif sampler == "ancestral_rf":
+        sampler = rectified_flow.AncestralSampler()
     else:
         raise NotImplemented(f"Sampler {sampler} not implemented.")
 
@@ -134,7 +128,9 @@ def sample(
             # ignored for non-adaptive sampling schemes
             frame_indices_iterator.set_videos(samples.to(device))
             try:
-                obs_frame_indices, latent_frame_indices = next(frame_indices_iterator)
+                obs_frame_indices, latent_frame_indices, temporal_mask = next(
+                    frame_indices_iterator
+                )
             except StopIteration:
                 break
 
@@ -168,10 +164,16 @@ def sample(
             context["frame_indices"] = frame_indices
             context["observed_mask"] = observed_mask.permute(0, 2, 1, 3, 4)
             context["latent_mask"] = latent_mask.permute(0, 2, 1, 3, 4)
+            context["video_mask"] = temporal_mask.to(device)
 
             local_samples, _ = diffusion_model.sample(
                 num_samples=num_samples, context=context, sampler=sampler
             )
+            video_tensor_to_gif(
+                local_samples,
+                str(f"{OUTPUT_NAME}/interim_sample_step_{step}.gif"),
+            )
+
             local_samples = local_samples.permute(0, 2, 1, 3, 4)
             for i, li in enumerate(latent_frame_indices):
                 samples[i, li] = local_samples[i, -len(li) :].cpu()

@@ -1,7 +1,9 @@
 """Utilities for training."""
 
 import numpy as np
+import random
 import torch
+from torch.utils.data import DataLoader
 from torchvision.transforms import v2
 from typing import Dict, Optional, Tuple
 
@@ -111,11 +113,51 @@ def sample_masks_for_training_batch(
     )
 
 
+def get_training_batch(dataloader: DataLoader, is_image_batch: bool):
+    source_videos, labels = next(dataloader)
+    if is_image_batch <= 0:
+        # There is no joint training data, so just return the batch
+        return source_videos, labels
+
+    # Can only do this if we are video training
+    assert len(source_videos.shape) == 5
+    B, C, F, H, W = source_videos.shape
+
+    # Now we need to pull items to fill out the training batch. In this case,
+    # the training batch will be batch size (B * F) with each entry a frame count of 1
+    image_frames = []
+    image_labels = []
+    f = 0
+    b = 0
+    video_batch, label_batch = next(dataloader)
+
+    # We need to fill out F independent frames for each batch item
+    while f < B * F:
+        b = 0
+        while b < video_batch.shape[0] and f < B * F:
+            # Choose a random frame from this batch item
+            frame_idx = random.randint(0, F - 1)
+            image_frames.append(video_batch[b, :, frame_idx, :, :][None, :, None, :, :])
+            image_labels.append(label_batch[b])
+            f += 1
+            b += 1
+        # Done with this batch, go to the next
+        video_batch, label_batch = next(dataloader)
+    source_videos = torch.cat(image_frames, dim=0)
+    labels = torch.stack(image_labels, dim=0)
+
+    assert source_videos.shape[0] == labels.shape[0]
+    assert source_videos.shape[0] == B * F
+    return source_videos, labels
+
+
 def preprocess_training_videos(
     source_videos: torch.Tensor,
     config: DotConfig,
     context: Dict,
     mask_generator: Optional[MaskGenerator] = None,
+    batch_size: int = -1,
+    is_image_batch: bool = False,
 ) -> Tuple[torch.Tensor, torch.Tensor, Dict]:
     # First resize the source videos to the configuration size, if we need to.
     B, C, F, H, W = source_videos.shape
@@ -169,8 +211,15 @@ def preprocess_training_videos(
             # No frame processing specified, just clip
             videos = source_videos[:, :, : config.data.input_number_of_frames, :, :]
 
+    if is_image_batch:
+        assert batch_size > 0
+        # We need to clip the batch size of image batches to the max of
+        # (batch_size * config.data.input_number_of_frames)
+        if videos.shape[0] > batch_size * config.data.input_number_of_frames:
+            videos = videos[: batch_size * config.data.input_number_of_frames, ...]
+
     # If there is a frame masking strategy add the video masks as well
-    if mask_generator is not None:
+    if mask_generator is not None and not is_image_batch:
         masks = mask_generator.get_masks(videos)
     else:
         masks = torch.ones(
