@@ -4,14 +4,17 @@ from dataclasses import dataclass
 import torch
 from einops import rearrange
 from torch import Tensor, nn
+from typing import Optional
 
 from xdiffusion.layers.utils import RMSNorm
 
 
-def attention(q: Tensor, k: Tensor, v: Tensor, pe: Tensor) -> Tensor:
+def attention(
+    q: Tensor, k: Tensor, v: Tensor, pe: Tensor, attn_mask: Tensor = None
+) -> Tensor:
     q, k = apply_rope(q, k, pe)
 
-    x = torch.nn.functional.scaled_dot_product_attention(q, k, v)
+    x = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask)
     x = rearrange(x, "B H L D -> B L (H D)")
 
     return x
@@ -136,7 +139,7 @@ class Modulation(nn.Module):
         self.multiplier = 6 if double else 3
         self.lin = nn.Linear(dim, self.multiplier * dim, bias=True)
 
-    def forward(self, vec: Tensor) -> tuple[ModulationOut, ModulationOut | None]:
+    def forward(self, vec: Tensor) -> tuple[ModulationOut, Optional[ModulationOut]]:
         out = self.lin(nn.functional.silu(vec))[:, None, :].chunk(
             self.multiplier, dim=-1
         )
@@ -183,7 +186,12 @@ class DoubleStreamBlock(nn.Module):
         )
 
     def forward(
-        self, img: Tensor, txt: Tensor, vec: Tensor, pe: Tensor
+        self,
+        img: Tensor,
+        txt: Tensor,
+        vec: Tensor,
+        pe: Tensor,
+        attn_mask: Tensor = None,
     ) -> tuple[Tensor, Tensor]:
         """Forward pass of block.
 
@@ -222,7 +230,7 @@ class DoubleStreamBlock(nn.Module):
         k = torch.cat((txt_k, img_k), dim=2)
         v = torch.cat((txt_v, img_v), dim=2)
 
-        attn = attention(q, k, v, pe=pe)
+        attn = attention(q, k, v, pe=pe, attn_mask=attn_mask)
         txt_attn, img_attn = attn[:, : txt.shape[1]], attn[:, txt.shape[1] :]
 
         # calculate the img bloks. Note this is NOT using the parallel
@@ -254,7 +262,7 @@ class SingleStreamBlock(nn.Module):
         hidden_size: int,
         num_heads: int,
         mlp_ratio: float = 4.0,
-        qk_scale: float | None = None,
+        qk_scale: Optional[float] = None,
     ):
         super().__init__()
         self.hidden_dim = hidden_size
