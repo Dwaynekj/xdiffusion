@@ -7,9 +7,9 @@ import torch
 from typing import List
 
 from xdiffusion.utils import load_yaml, DotConfig
-from xdiffusion.ddpm import GaussianDiffusion_DDPM
+from xdiffusion.diffusion.ddpm import GaussianDiffusion_DDPM
 from xdiffusion.diffusion import DiffusionModel
-from xdiffusion.cascade import GaussianDiffusionCascade
+from xdiffusion.diffusion.cascade import GaussianDiffusionCascade
 from xdiffusion.samplers import ddim, ancestral, base
 
 OUTPUT_NAME = "output/mnist/sample"

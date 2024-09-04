@@ -18,9 +18,9 @@ from typing import List
 from torchvision.transforms import v2
 
 from xdiffusion.utils import cycle, load_yaml, DotConfig
-from xdiffusion.ddpm import GaussianDiffusion_DDPM
+from xdiffusion.diffusion.ddpm import GaussianDiffusion_DDPM
 from xdiffusion.diffusion import DiffusionModel
-from xdiffusion.cascade import GaussianDiffusionCascade
+from xdiffusion.diffusion.cascade import GaussianDiffusionCascade
 from xdiffusion.datasets.moving_mnist import MovingMNISTImage
 
 OUTPUT_NAME = "output/image/moving_mnist"

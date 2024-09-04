@@ -1,5 +1,5 @@
 # Variance Preserving SDE diffusion model, with a UNet background.
-target: xdiffusion.diffusion_sde.GaussianDiffusion_SDE
+target: xdiffusion.diffusion.sde.GaussianDiffusion_SDE
 diffusion:
   # Do we train the score network continuously or not
   continuous: True

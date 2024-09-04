@@ -8,7 +8,7 @@ from torchvision import utils
 from typing import List, Optional
 
 from xdiffusion.diffusion import DiffusionModel
-from xdiffusion.ddpm import GaussianDiffusion_DDPM
+from xdiffusion.diffusion.ddpm import GaussianDiffusion_DDPM
 from xdiffusion.samplers import ddim, ancestral, rectified_flow, base, schemes
 from xdiffusion.utils import (
     instantiate_from_config,

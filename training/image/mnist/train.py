@@ -13,9 +13,9 @@ from tqdm import tqdm
 from typing import List
 
 from xdiffusion.utils import cycle, get_obj_from_str, load_yaml, DotConfig
-from xdiffusion.ddpm import GaussianDiffusion_DDPM
+from xdiffusion.diffusion.ddpm import GaussianDiffusion_DDPM
 from xdiffusion.diffusion import DiffusionModel
-from xdiffusion.cascade import GaussianDiffusionCascade
+from xdiffusion.diffusion.cascade import GaussianDiffusionCascade
 
 OUTPUT_NAME = "output/image/mnist"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"

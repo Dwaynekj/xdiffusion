@@ -11,7 +11,7 @@ from typing import List
 
 from xdiffusion.datasets.moving_mnist import MovingMNIST
 from xdiffusion.diffusion import DiffusionModel
-from xdiffusion.ddpm import GaussianDiffusion_DDPM
+from xdiffusion.diffusion.ddpm import GaussianDiffusion_DDPM
 from xdiffusion.samplers import ddim, ancestral, base
 from xdiffusion.utils import (
     load_yaml,

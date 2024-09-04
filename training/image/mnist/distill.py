@@ -23,9 +23,9 @@ from xdiffusion.utils import (
     unfreeze,
     DotConfig,
 )
-from xdiffusion.ddpm import GaussianDiffusion_DDPM
+from xdiffusion.diffusion.ddpm import GaussianDiffusion_DDPM
 from xdiffusion.diffusion import DiffusionModel, PredictionType
-from xdiffusion.cascade import GaussianDiffusionCascade
+from xdiffusion.diffusion.cascade import GaussianDiffusionCascade
 from xdiffusion.samplers.ddim import DDIMSampler
 
 OUTPUT_NAME = "output/mnist/distilled"

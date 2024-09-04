@@ -17,8 +17,8 @@ from xdiffusion.utils import (
     video_tensor_to_gif,
     normalize_to_neg_one_to_one,
 )
-from xdiffusion.ddpm import GaussianDiffusion_DDPM
-from xdiffusion.cascade import GaussianDiffusionCascade
+from xdiffusion.diffusion.ddpm import GaussianDiffusion_DDPM
+from xdiffusion.diffusion.cascade import GaussianDiffusionCascade
 from xdiffusion.diffusion import DiffusionModel
 from xdiffusion.datasets.moving_mnist import MovingMNIST
 from xdiffusion.training_utils import get_training_batch, preprocess_training_videos
