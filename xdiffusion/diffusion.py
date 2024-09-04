@@ -7,7 +7,7 @@ from typing_extensions import Self
 from xdiffusion.samplers.base import ReverseProcessSampler
 from xdiffusion.scheduler import NoiseScheduler
 from xdiffusion.utils import DotConfig
-from xdiffusion.sde import SDE
+from xdiffusion.sde.base import SDE
 
 
 class PredictionType(Enum):

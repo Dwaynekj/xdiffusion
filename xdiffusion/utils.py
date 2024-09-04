@@ -207,14 +207,17 @@ def instantiate_from_config(config, use_config_struct: bool = False) -> Any:
         return get_obj_from_str(config["target"])(**config.get("params", dict()))
 
 
-def instantiate_partial_from_config(config) -> Any:
+def instantiate_partial_from_config(config, use_config_struct: bool = False) -> Any:
     if not "target" in config:
         if config == "__is_first_stage__":
             return None
         elif config == "__is_unconditional__":
             return None
         raise KeyError("Expected key `target` to instantiate.")
-    return partial(get_obj_from_str(config["target"]), **config.get("params", dict()))
+    if use_config_struct:
+        return partial(get_obj_from_str(config["target"]), config["params"])
+    else:
+        return partial(get_obj_from_str(config["target"]), **config.get("params", dict()))
 
 
 def type_from_config(config) -> Type:

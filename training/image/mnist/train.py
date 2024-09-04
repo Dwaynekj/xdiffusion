@@ -12,7 +12,7 @@ from torchvision.datasets import MNIST
 from tqdm import tqdm
 from typing import List
 
-from xdiffusion.utils import cycle, load_yaml, DotConfig
+from xdiffusion.utils import cycle, get_obj_from_str, load_yaml, DotConfig
 from xdiffusion.ddpm import GaussianDiffusion_DDPM
 from xdiffusion.diffusion import DiffusionModel
 from xdiffusion.cascade import GaussianDiffusionCascade
@@ -90,6 +90,8 @@ def train(
     # specifically for the MNIST dataset.
     if "diffusion_cascade" in config:
         diffusion_model = GaussianDiffusionCascade(config)
+    elif "target" in config:
+        diffusion_model = get_obj_from_str(config["target"])(config)
     else:
         diffusion_model = GaussianDiffusion_DDPM(config=config)
 

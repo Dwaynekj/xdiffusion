@@ -167,7 +167,7 @@ def train(
             is_image_batch = (
                 joint_image_video_training_step > 1
                 and (step % joint_image_video_training_step) == 0
-            )
+            ) or joint_image_video_training_step == 1
             source_videos, labels = get_training_batch(
                 dataloader,
                 is_image_batch=is_image_batch,

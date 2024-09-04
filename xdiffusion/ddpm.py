@@ -16,7 +16,7 @@ from typing_extensions import Self
 from xdiffusion.diffusion import DiffusionModel, PredictionType
 from xdiffusion.samplers.ancestral import AncestralSampler
 from xdiffusion.samplers.base import ReverseProcessSampler
-from xdiffusion.sde import SDE
+from xdiffusion.sde.base import SDE
 from xdiffusion.scheduler import NoiseScheduler
 from xdiffusion.utils import (
     broadcast_from_left,
