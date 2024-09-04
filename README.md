@@ -33,8 +33,6 @@ In this repository, we will be working with the [MNIST](https://en.wikipedia.org
 ### Image Models
 The following is a list of the supported image models, their current results, and a link to their configuration files and documentation.
 
-7 | November 2020 | Score SDE | [Score-Based Generative Modeling through Stochastic Differential Equations](https://arxiv.org/abs/2011.13456) | | | [code](https://github.com/swookey-thinky/mindiffusion/tree/main/lesson_07)
-
 | Date  | Name  | Paper | Config | Results | Instructions
 | :---- | :---- | ----- | ------ | ----- | -----
 | November 2022 | Score-SDE | [Score-Based Generative Modeling through Stochastic Differential Equations](https://arxiv.org/abs/2011.13456) | [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/score_sde_subvpsde.yaml) | ![Sub-VPE SDE](https://drive.google.com/uc?export=view&id=1SPCFu0aFkcfXKpmLE2p3RteIZ-dCBeuA)| [instructions](https://github.com/swookey-thinky/xdiffusion/blob/main/docs/image/score_sde.md)
