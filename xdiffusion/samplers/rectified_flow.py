@@ -43,17 +43,17 @@ class AncestralSampler(ReverseProcessSampler):
 
         # Uniform sampling over t
         # TODO: Add different sampling schedules
-        dt = 1.0 / sde.N()
+        dt = 1.0 / sde.N
         # default: 1e-3
         eps = 1e-3
 
         # Time flows from 0 -> 1, in the reverse ODE formulation, but in the
         # diffusion formulations, time flows from 1 -> 0 (which is was timestep_idx is based on).
         timestep_idx = context["timestep_idx"]
-        timestep_idx = sde.N() - (timestep_idx + 1)
+        timestep_idx = sde.N - (timestep_idx + 1)
 
         # num_t, t is in the range [eps,1-eps]
-        num_t = timestep_idx / sde.N() * (sde.T() - eps) + eps
+        num_t = timestep_idx / sde.N * (sde.T - eps) + eps
         t = torch.ones(x.shape[0], device=x.device) * num_t
         context["timestep"] = t
 

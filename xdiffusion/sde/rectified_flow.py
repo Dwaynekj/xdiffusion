@@ -1,4 +1,4 @@
-from xdiffusion.sde import SDE
+from xdiffusion.sde.base import SDE
 
 
 class RectifiedFlow(SDE):
@@ -7,10 +7,12 @@ class RectifiedFlow(SDE):
         self._N = N
         self._T = T
 
-    def T(self) -> int:
+    @property
+    def T(self):
         return self._T
 
-    def N(self) -> int:
+    @property
+    def N(self):
         return self._N
 
     def ode(self, intial_input, diffusion_model, reverse: bool = False):
