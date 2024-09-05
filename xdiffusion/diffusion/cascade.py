@@ -5,7 +5,7 @@ from torchvision import transforms
 from tqdm import tqdm
 from typing import Callable, Dict, List, Optional, Tuple
 
-from xdiffusion.ddpm import GaussianDiffusion_DDPM
+from xdiffusion.diffusion.ddpm import GaussianDiffusion_DDPM
 from xdiffusion.diffusion import DiffusionModel
 from xdiffusion.samplers.base import ReverseProcessSampler
 from xdiffusion.utils import (

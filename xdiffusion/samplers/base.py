@@ -10,6 +10,7 @@ class ReverseProcessSampler:
         x: torch.Tensor,
         context: Dict,
         unconditional_context: Optional[Dict],
+        diffusion_model: "DiffusionModel",
         guidance_fn=None,
         classifier_free_guidance: Optional[float] = None,
     ):
