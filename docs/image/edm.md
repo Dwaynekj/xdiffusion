@@ -49,5 +49,5 @@ Output will be saved to the `output/image/mnist/sample/edm` directory.
 ## Results and Checkpoints
 
 | Config | Checkpoint | Num Sampling Steps | Results
-| ------ | ---------- | ------- | 
+| ------ | ---------- | ------- | -------
 | [EDM](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/edm.yaml) | [Google Drive](https://drive.google.com/file/d/1lAatYJKvetBaOhYiioeX2YoA6OTxymxl/view?usp=sharing) | 18 | ![EDM](https://drive.google.com/uc?export=view&id=1yUeR5ep9mK1IwMsTyHwhyAqlftFwBNYz)
