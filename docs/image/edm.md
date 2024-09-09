@@ -41,7 +41,7 @@ We successfully tested training on a single T4 instance (16GB VRAM) using a batc
 To sample from a pretrained checkpoint, you can run:
 
 ```
-> python sampling/image/mnist/sample.py --config_path configs/image/mnist/edm.yaml --num_samples 8 --checkpoint output/image/mnist/edmi/diffusion-20000.pt
+> python sampling/image/mnist/sample.py --config_path configs/image/mnist/edm.yaml --num_samples 8 --checkpoint output/image/mnist/edm/diffusion-20000.pt
 ```
 
 Output will be saved to the `output/image/mnist/sample/edm` directory.
