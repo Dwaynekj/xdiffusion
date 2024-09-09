@@ -12,10 +12,11 @@ from torchvision.datasets import MNIST
 from tqdm import tqdm
 from typing import List
 
-from xdiffusion.utils import cycle, get_obj_from_str, load_yaml, DotConfig
 from xdiffusion.diffusion.ddpm import GaussianDiffusion_DDPM
 from xdiffusion.diffusion import DiffusionModel
 from xdiffusion.diffusion.cascade import GaussianDiffusionCascade
+from xdiffusion.layers.ema import create_ema_and_scales_fn
+from xdiffusion.utils import cycle, get_obj_from_str, load_yaml, DotConfig
 
 OUTPUT_NAME = "output/image/mnist"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -150,6 +151,26 @@ def train(
             learning_rate_schedules[schedule_idx]
         )
 
+    # If there is an EMA configuration section, create it here
+    if "exponential_moving_average" in config.diffusion:
+        ema_scale_fn = create_ema_and_scales_fn(
+            target_ema_mode=config.diffusion.exponential_moving_average.target_ema_mode,
+            start_ema=config.diffusion.exponential_moving_average.start_ema,
+            scale_mode=config.diffusion.exponential_moving_average.scale_mode,
+            start_scales=config.diffusion.exponential_moving_average.start_scales,
+            end_scales=config.diffusion.exponential_moving_average.end_scales,
+            total_steps=num_training_steps,
+            distill_steps_per_iter=(
+                config.diffusion.exponential_moving_average.distill_steps_per_iter
+                if "distill_steps_per_iter"
+                in config.diffusion.exponential_moving_average
+                else 0
+            ),
+        )
+    else:
+        # Default scale function returns the target ema rate
+        ema_scale_fn = lambda step: 0.9999, 0
+
     # Step counter to keep track of training
     step = 0
 
@@ -181,6 +202,9 @@ def train(
                 config_for_layer = model_for_layer.config()
                 context_for_layer = context.copy()
                 images_for_layer = images
+
+                context_for_layer["step"] = step
+                context_for_layer["total_steps"] = num_training_steps
 
                 if "super_resolution" in config_for_layer:
                     # First create the low resolution context.
@@ -238,7 +262,10 @@ def train(
                 optimizer_for_layer.step()
                 schedule_for_layer.step()
 
-                # Resent the gradients for the next step.
+                # Update the ema parameters for the model if they are supported
+                model_for_layer.update_ema(step, num_training_steps, ema_scale_fn)
+
+                # Reset the gradients for the next step.
                 optimizer_for_layer.zero_grad()
                 stage_loss += loss.item()
 

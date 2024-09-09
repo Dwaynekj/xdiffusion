@@ -56,6 +56,12 @@ class GaussianDiffusion_SDE(DiffusionModel):
     def config(self) -> DotConfig:
         return self._config
 
+    def update_ema(
+        self, step: int, total_steps: int, scale_fn: Callable[[int], Tuple[float, int]]
+    ):
+        # EMA not supported yet
+        return
+
     def print_model_summary(self):
         batch_size = 4
         device = "cuda"

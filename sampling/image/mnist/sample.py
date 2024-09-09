@@ -4,15 +4,21 @@ import math
 import os
 from pathlib import Path
 import torch
+from torchvision import utils
 from typing import List
 
-from xdiffusion.utils import load_yaml, DotConfig
+from xdiffusion.utils import (
+    load_yaml,
+    DotConfig,
+    instantiate_from_config,
+    get_obj_from_str,
+)
 from xdiffusion.diffusion.ddpm import GaussianDiffusion_DDPM
 from xdiffusion.diffusion import DiffusionModel
 from xdiffusion.diffusion.cascade import GaussianDiffusionCascade
 from xdiffusion.samplers import ddim, ancestral, base
 
-OUTPUT_NAME = "output/mnist/sample"
+OUTPUT_NAME = "output/image/mnist/sample"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
@@ -22,7 +28,7 @@ def sample_model(
     guidance: float,
     checkpoint_path: str,
     sampling_steps: int,
-    sampler: str,
+    sampler_config_path: str,
 ):
     global OUTPUT_NAME
     OUTPUT_NAME = f"{OUTPUT_NAME}/{str(Path(config_path).stem)}"
@@ -37,6 +43,8 @@ def sample_model(
     # specifically for the MNIST dataset.
     if "diffusion_cascade" in config:
         diffusion_model = GaussianDiffusionCascade(config)
+    elif "target" in config:
+        diffusion_model = get_obj_from_str(config["target"])(config)
     else:
         diffusion_model = GaussianDiffusion_DDPM(config=config)
 
@@ -56,12 +64,13 @@ def sample_model(
     # Move the model and the optimizer to the accelerator as well.
     diffusion_model = accelerator.prepare(diffusion_model)
 
-    if sampler == "ddim":
-        sampler = ddim.DDIMSampler()
-    elif sampler == "ancestral":
-        sampler = ancestral.AncestralSampler()
+    if sampler_config_path:
+        sampler = instantiate_from_config(
+            load_yaml(sampler_config_path).sampling.to_dict()
+        )
     else:
-        raise NotImplemented(f"Sampler {sampler} not implemented.")
+        # Use the sampler the model was trained with.
+        sampler = None
 
     # Save and sample the final step.
     sample(
@@ -78,7 +87,7 @@ def sample(
     config: DotConfig,
     sampler: base.ReverseProcessSampler,
     num_samples=64,
-    num_sampling_steps=1000,
+    num_sampling_steps=None,
 ):
     device = next(diffusion_model.parameters()).device
 
@@ -165,7 +174,7 @@ def main(override=None):
     parser.add_argument("--guidance", type=float, default=1.0)
     parser.add_argument("--checkpoint", type=str, default="")
     parser.add_argument("--sampling_steps", type=int, default=1000)
-    parser.add_argument("--sampler", type=str, default="ancestral")
+    parser.add_argument("--sampler_config_path", type=str, default="")
     args = parser.parse_args()
 
     sample_model(
@@ -174,7 +183,7 @@ def main(override=None):
         guidance=args.guidance,
         checkpoint_path=args.checkpoint,
         sampling_steps=args.sampling_steps,
-        sampler=args.sampler,
+        sampler_config_path=args.sampler_config_path,
     )
 
 

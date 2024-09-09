@@ -223,6 +223,12 @@ class GaussianDiffusion_EDM(DiffusionModel):
     def models(self) -> List[DiffusionModel]:
         return [self]
 
+    def update_ema(
+        self, step: int, total_steps: int, scale_fn: Callable[[int], Tuple[float, int]]
+    ):
+        # EMA not supported yet
+        return
+
     def config(self) -> DotConfig:
         return self._config
 

@@ -107,6 +107,12 @@ class GaussianDiffusion_DDPM(DiffusionModel):
     def config(self) -> DotConfig:
         return self._config
 
+    def update_ema(
+        self, step: int, total_steps: int, scale_fn: Callable[[int], Tuple[float, int]]
+    ):
+        # EMA not supported yet
+        return
+
     def loss_on_batch(self, images, context: Dict, **kwargs) -> Dict:
         """Calculates the reverse process loss on a batch of images.
 

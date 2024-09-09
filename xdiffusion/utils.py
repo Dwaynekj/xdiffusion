@@ -217,7 +217,9 @@ def instantiate_partial_from_config(config, use_config_struct: bool = False) -> 
     if use_config_struct:
         return partial(get_obj_from_str(config["target"]), config["params"])
     else:
-        return partial(get_obj_from_str(config["target"]), **config.get("params", dict()))
+        return partial(
+            get_obj_from_str(config["target"]), **config.get("params", dict())
+        )
 
 
 def type_from_config(config) -> Type:
@@ -323,6 +325,27 @@ def get_constant_schedule_with_warmup(
 def broadcast_from_left(x, shape):
     assert len(shape) >= x.ndim
     return torch.broadcast_to(x.reshape(x.shape + (1,) * (len(shape) - x.ndim)), shape)
+
+
+def append_dims(x, target_dims):
+    """Appends dimensions to the end of a tensor until it has target_dims dimensions."""
+    dims_to_append = target_dims - x.ndim
+    if dims_to_append < 0:
+        raise ValueError(
+            f"input has {x.ndim} dims but target_dims is {target_dims}, which is less"
+        )
+    return x[(...,) + (None,) * dims_to_append]
+
+
+def append_zero(x):
+    return torch.cat([x, x.new_zeros([1])])
+
+
+def mean_flat(tensor):
+    """
+    Take the mean over all non-batch dimensions.
+    """
+    return tensor.mean(dim=list(range(1, len(tensor.shape))))
 
 
 def log1mexp(x):

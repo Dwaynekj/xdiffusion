@@ -90,3 +90,9 @@ class DiffusionModel(torch.nn.Module):
     def sde(self) -> Optional[SDE]:
         """Gets the SDE associated with this diffusion model, if it exists."""
         pass
+
+    @abstractmethod
+    def update_ema(
+        self, step: int, total_steps: int, scale_fn: Callable[[int], Tuple[float, int]]
+    ):
+        pass

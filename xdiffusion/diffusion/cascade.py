@@ -47,6 +47,12 @@ class GaussianDiffusionCascade(DiffusionModel):
     def config(self) -> DotConfig:
         return self._config
 
+    def update_ema(
+        self, step: int, total_steps: int, scale_fn: Callable[[int], Tuple[float, int]]
+    ):
+        # EMA not supported yet
+        return
+
     def load_checkpoint(self, checkpoint_path: str):
         assert False, "Loading model weights for a cascade not supported yet."
 
