@@ -1,0 +1,11 @@
+sampling:
+  output_channels: 1
+  output_spatial_size: 32
+  target: xdiffusion.samplers.consistency.GeneralizedConsistencySampler
+  params:
+    sampler: "ancestral"
+    sigma_min: 0.002
+    sigma_max: 80
+    rho: 7
+    clip_denoised: True
+    steps: 40
