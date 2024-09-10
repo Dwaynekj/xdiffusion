@@ -17,10 +17,10 @@ def update_ema(target_params, source_params, rate=0.99):
 def create_ema_and_scales_fn(
     target_ema_mode: str,
     start_ema: float,
-    scale_mode: str,
-    start_scales: float,
-    end_scales: float,
     total_steps: int,
+    scale_mode: str = "fixed",
+    start_scales: float = 0,
+    end_scales: float = 0,
     distill_steps_per_iter: int = 0,
 ):
     assert target_ema_mode in ["fixed", "adaptive"]

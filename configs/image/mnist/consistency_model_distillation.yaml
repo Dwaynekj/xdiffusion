@@ -1,4 +1,4 @@
-# DDPM++ architecture with EDM pre-conditioning and loss, used in a consistency model.
+# Consistency model distillation using EDM architecture.
 target: xdiffusion.diffusion.consistency.GaussianDiffusion_ConsistencyModel
 diffusion:
   # Sampling section determines the size of the sampled output
@@ -15,17 +15,13 @@ diffusion:
   consistency_model:
     rho: 7
     target_ema:
-      target_ema_mode: "adaptive"
+      target_ema_mode: "fixed"
       start_ema: 0.95
-      scale_mode: "progressive"
-      start_scales: 2
-      end_scales: 200
+      scale_mode: "fixed"
+      start_scales: 40
   exponential_moving_average:
     target_ema_mode: "fixed"
     start_ema: 0.9999
-    scale_mode: "fixed"
-    start_scales: 0
-    end_scales: 0
   # A preprocessor to use with the context before sending to the score network.
   context_preprocessing:
       # The Prompts Preprocessor converts the list of text prompts in the context
@@ -53,7 +49,7 @@ diffusion:
       params: {}
   # Loss function to use in training
   loss:
-    target: xdiffusion.diffusion.consistency.ConsistencyTrainingLoss
+    target: xdiffusion.diffusion.consistency.ConsistencyDistillationLoss
     params:
       sigma_data: 0.5
       rho: 7.0

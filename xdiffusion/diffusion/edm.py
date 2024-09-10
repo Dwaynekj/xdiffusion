@@ -60,6 +60,7 @@ class GaussianDiffusion_EDM(DiffusionModel):
         guidance_fn: Optional[Callable] = None,
         classifier_free_guidance: Optional[float] = None,
         sampler: Optional[ReverseProcessSampler] = None,
+        num_sampling_steps: Optional[int] = None,
         initial_noise: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[List[torch.Tensor]]]:
         # The output shape of the data.
@@ -238,7 +239,8 @@ class GaussianDiffusion_EDM(DiffusionModel):
     def predict_score(
         self, x: torch.Tensor, context: Dict
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-        raise NotImplementedError()
+        # Assumes context has "t", which for edm models is batch of sigmas.
+        return self._score_network(x, context["t"])
 
     def is_learned_sigma(self) -> bool:
         raise NotImplementedError()
