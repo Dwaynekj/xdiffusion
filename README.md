@@ -56,7 +56,7 @@ Sample from the original dataset:
 ![Moving MNIST](https://drive.google.com/uc?export=view&id=1FS9lEd6DPFJ4Ka7hUgqk2BlsJ8FzOdPE)
 
 ### Video Diffusion Models
-The following is a list of the supported image models, their current results, and a link to their configuration files and documentation.
+The following is a list of the supported video models, their current results, and a link to their configuration files and documentation.
 
 | Date  | Name  | Paper | Config | Results | Instructions
 | :---- | :---- | ----- | ------ | ----- | -----
@@ -95,6 +95,16 @@ The following is a list of the supported image models, their current results, an
 | April 2024 | TI2V-Zero | [TI2V-Zero: Zero-Shot Image Conditioning for Text-to-Video Diffusion Models](https://arxiv.org/abs/2404.16306) | | |
 | May 2024 | Vidu | [Vidu: a Highly Consistent, Dynamic and Skilled Text-to-Video Generator with Diffusion Models](https://arxiv.org/abs/2405.04233) | | |
 | May 2024 | FIFO-Diffusion | [FIFO-Diffusion: Generating Infinite Videos from Text without Training](https://arxiv.org/abs/2405.11473) | | |
+
+## Audio Diffusion
+
+### Audio Diffusion Models
+The following is a list of the supported audio diffusion models, their current results, and a link to their configuration files and documentation.
+
+| Date  | Name  | Paper | Config | Results | Instructions
+| :---- | :---- | ----- | ------ | ----- | -----
+| January 2023 | Make-An-Audio | [Make-An-Audio: Text-To-Audio Generation with Prompt-Enhanced Diffusion Models](https://arxiv.org/abs/2301.12661) | | | 
+| July 2024 | Stable Audio Open | [Stable Audio Open](https://arxiv.org/abs/2407.14358) | | | 
 
 ## TODO
 
