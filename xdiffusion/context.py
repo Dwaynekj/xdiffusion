@@ -14,6 +14,7 @@ image_imbeddings
 """
 
 from abc import abstractmethod
+from einops import rearrange
 import torch
 from transformers import (
     AutoTokenizer,
@@ -421,3 +422,35 @@ class SD3TextPromptsPreprocessor(torch.nn.Module):
         )
 
         return prompt_embeds
+
+
+class SpatialBatchForVideo(torch.nn.Module):
+    """Convert spatial data into batched spatio-temporal data."""
+
+    def __init__(
+        self,
+        input_context_key: str,
+        num_frames: str,
+        **kwargs,
+    ):
+        super().__init__()
+        self._input_context_key = input_context_key
+        self._num_frames = num_frames
+
+    def forward(self, context: Dict, device, **kwargs):
+        assert (
+            self._input_context_key in context
+        ), f"{self._input_context_key} not found for projection {self._projection_key}."
+
+        # Batch the context item with the number of frames
+        x = context[self._input_context_key]
+        # Add the frame dimension
+        x = x[:, None, ...]
+        # Tile the number of frames
+        tile_dims = [1] * len(x.shape)
+        tile_dims[1] = self._num_frames
+        x = torch.tile(x, dims=tile_dims)
+        # Re-batch the temporal dimensions
+        x = rearrange(x, "b f ... -> (b f) ...")
+        context[self._input_context_key] = x
+        return context

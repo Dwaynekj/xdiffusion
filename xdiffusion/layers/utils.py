@@ -122,6 +122,14 @@ class ContextBlock(torch.nn.Module):
         """Apply the module to `x` given `context` conditioning."""
 
 
+class ContextIdentity(torch.nn.Identity):
+    """Basic block which accepts a context conditioning."""
+
+    def forward(self, x, context):
+        """Apply the module to `x` given `context` conditioning."""
+        return super().forward(x)
+
+
 class Format(str, Enum):
     NCHW = "NCHW"
     NHWC = "NHWC"
