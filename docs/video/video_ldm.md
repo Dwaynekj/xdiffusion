@@ -50,7 +50,8 @@ The following results were generated after training on a single T4 instance for 
 
 | Config | Checkpoint | Results
 | ------ | ---------- | -------
-| [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/video/moving_mnist/video_ldm.yaml) | [google drive](https://drive.google.com/file/d/1gAMyfBjr47sscPGNlzsxAHJegHv-dLrc/view?usp=sharing) | ![Video LDM](https://drive.google.com/uc?export=view&id=1aYxiwkgdAd6oFpXMwQhDwfiXXYJlDDFG)
+| [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/video/moving_mnist/video_ldm.yaml) | [google drive](https://drive.google.com/file/d/17ItId0ogI00ELsMXTBUQAoaVKlsUyvya/view?usp=sharing) | ![Video LDM](https://drive.google.com/uc?export=view&id=1UsKoMKyaeQspVGxNhhowWx7OQ57XEIiH)
+
 
 ## Other Resources
 
