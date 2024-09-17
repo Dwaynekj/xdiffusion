@@ -1,10 +1,10 @@
-# Align your Latents: High-Resolution Video Synthesis with Latent Diffusion Models
+# AnimateDiff: Animate Your Personalized Text-to-Image Diffusion Models without Specific Tuning
 
-In this example we introduce Video-LDM from the paper [Align your Latents: High-Resolution Video Synthesis with Latent Diffusion Models](https://arxiv.org/abs/2304.08818).
+In this example we introduce Animate-Diff from the paper [AnimateDiff: Animate Your Personalized Text-to-Image Diffusion Models without Specific Tuning](https://arxiv.org/abs/2307.04725).
 
 ## Introduction
 
-Video-LDM is a fun model that can turn any image diffusion model into a video diffusion model. The key insight they introduce is adding training temporal layers to a fixed, frozen image diffusion model, and treating the spatio-temporal data as spatial data in the batch dimension (so `"b c f h w -> (b f) c h w"`). This is cool because the model retains the ability to generate high quality imagery, and you are essentially just fine tuning for temporal relationships.
+Animate-Diff is a very similar model and methodology to [Video-LDM](https://arxiv.org/abs/2304.08818), in that both of them can turn any pretrained image diffusion model into a video difusion model. Animate-Diff goes a step further and introduces the notion of Motion-LORA's, which we will explore in a separate lesson. The main architectural difference is that Video-LDM inserts 3D temporal convolutions in addition to temporal cross-attention, whereas AnimateDiff adds a temporal transformer module, with no cross attention to the text embeddings.
 
 In this example, we train a standard v-parameterized DDPM Unet based model on the individual frames of Moving MNIST (see [Moving MNIST DDPM](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/moving_mnist/ddpm_32x32_v_continuous_clip.yaml) for the configuration file). This gives the model a strong prior to generate in-domain imagery. Then, we take those weights and train the video model on top of it.
 
@@ -14,7 +14,7 @@ One cool aspect of this model is that since the original image model weights are
 
 The configuration file to train the image model is located in [Moving MNIST DDPM](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/moving_mnist/ddpm_32x32_v_continuous_clip.yaml)
 
-The configuration file to train the video model is located in [Video LDM](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/video/moving_mnist/video_ldm.yaml).
+The configuration file to train the video model is located in [AnimateDiff](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/video/moving_mnist/animate_diff.yaml).
 
 ## Training
 
@@ -29,7 +29,7 @@ Next, you need to train the base image diffusion model. To train the model, run 
 Now, we can train the video model using the above image model checkpoint. To train the model, run the following from the root of the repository:
 
 ```
-> python training/video/moving_mnist/train.py --config_path configs/video/moving_mnist/video_ldm.yaml --batch_size 8 --load_model_weights_from_checkpoint output/image/moving_mnist/ddpm_32x32_v_continuous_clip/diffusion-20000.pt --num_training_steps 200000
+> python training/video/moving_mnist/train.py --config_path configs/video/moving_mnist/animate_diff.yaml --batch_size 8 --load_model_weights_from_checkpoint output/image/moving_mnist/ddpm_32x32_v_continuous_clip/diffusion-20000.pt --num_training_steps 100000
 ```
 
 We successfully tested training on a single T4 instance (16GB VRAM) using a batch size of 8.
@@ -39,10 +39,10 @@ We successfully tested training on a single T4 instance (16GB VRAM) using a batc
 To sample from a pretrained checkpoint, you can run:
 
 ```
-> python training/video/moving_mnist/sample.py --config_path configs/video/moving_mnist/video_ldm.yaml --num_samples 16 --checkpoint output/video/moving_mnist/video_ldm/diffusion-100000.pt
+> python training/video/moving_mnist/sample.py --config_path configs/video/moving_mnist/animate_diff.yaml --num_samples 16 --checkpoint output/video/moving_mnist/animate_diff/diffusion-100000.pt
 ```
 
-Output will be saved to the `output/moving_mnist/sample/video_ldm` directory.
+Output will be saved to the `output/moving_mnist/sample/animate_diff` directory.
 
 ## Results and Checkpoints
 
@@ -50,9 +50,8 @@ The following results were generated after training on a single T4 instance for 
 
 | Config | Checkpoint | Results
 | ------ | ---------- | -------
-| [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/video/moving_mnist/video_ldm.yaml) | [google drive](https://drive.google.com/file/d/17ItId0ogI00ELsMXTBUQAoaVKlsUyvya/view?usp=sharing) | ![Video LDM](https://drive.google.com/uc?export=view&id=1UsKoMKyaeQspVGxNhhowWx7OQ57XEIiH)
-
+| [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/video/moving_mnist/animate_diff.yaml) | [google drive](https://drive.google.com/file/d/1FlyvW7g1GhU5XqHKqaHMoafnr0hdCuXr/view?usp=sharing) | ![Video LDM](https://drive.google.com/uc?export=view&id=11EJWvEilKqmrGabCRvjM5CxW6I7mWEEg)
 
 ## Other Resources
 
-Unfortunately the authors did not release their source code for this model.
+The authors released the original source code for their model at [AnimateDiff](https://github.com/guoyww/AnimateDiff/)
