@@ -692,7 +692,7 @@ class GaussianDiffusion_DDPM(DiffusionModel):
                 checkpoint["model_state_dict"], strict=strict
             )
             for k in missing_keys:
-                assert "temporal" in k, k
+                assert "temporal" in k or "motion_module" in k, k
 
     def configure_optimizers(self, learning_rate: float) -> List[torch.optim.Optimizer]:
 
