@@ -114,13 +114,15 @@ def sample(
 
         # Unconditional conditioning for the first step. Note that
         # this is (B, T, C, H, W), not the normal channels first.
+        s = config.data.image_size
+        image_size = [s[0], s[1]] if isinstance(s, list) else [s, s]
         samples = torch.zeros(
             size=(
                 num_samples,
                 sampling_scheme.video_length,
                 config.data.num_channels,
-                config.data.image_size,
-                config.data.image_size,
+                image_size[0],
+                image_size[1],
             ),
         )
         step = 0

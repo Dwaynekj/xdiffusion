@@ -119,9 +119,12 @@ class Unet(torch.nn.Module):
             else ResnetBlockDDPM
         )
 
+        s = config.input_spatial_size
+        input_spatial_size = [s[0], s[1]] if isinstance(s, list) else [s, s]
+
         attention_ds = []
         for res in config.attention.attention_resolutions:
-            attention_ds.append(config.input_spatial_size // int(res))
+            attention_ds.append(input_spatial_size[1] // int(res))
 
         # The number of resnet blocks in each layer.
         num_resnet_blocks = config.num_resnet_blocks

@@ -5,9 +5,11 @@ from functools import partial
 import importlib
 import math
 import numpy as np
+import soundfile as sf
 import torch
 from torch.utils.data import DataLoader
 from torchvision.transforms import v2
+from tqdm import tqdm
 from typing import Any, Dict, Type, TypeVar
 import yaml
 
@@ -394,3 +396,13 @@ def video_tensor_to_gif(tensor, path, duration=120, loop=0, optimize=True):
         optimize=optimize,
     )
     return images
+
+
+def save_mel_spectrogram_audio(mel_spec: torch.Tensor, path_spec: str):
+    # Convert to wav
+    from xdiffusion.layers.audio import mel_to_wav
+
+    batch_mel_spec = mel_spec.cpu().numpy()
+    for idx in tqdm(range(batch_mel_spec.shape[0]), leave=False, desc="Saving"):
+        wav = mel_to_wav(mel_spec=batch_mel_spec[idx][0], sample_rate=16000)
+        sf.write(path_spec.format(idx=idx), wav, 16000)

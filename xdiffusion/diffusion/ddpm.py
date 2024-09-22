@@ -22,6 +22,7 @@ from xdiffusion.utils import (
     broadcast_from_left,
     discretized_gaussian_log_likelihood,
     fix_torchinfo_for_str,
+    freeze,
     instantiate_from_config,
     instantiate_partial_from_config,
     normal_kl,
@@ -29,6 +30,7 @@ from xdiffusion.utils import (
     prob_mask_like,
     unnormalize_to_zero_to_one,
     get_constant_schedule_with_warmup,
+    get_obj_from_str,
     DotConfig,
 )
 
@@ -40,9 +42,10 @@ class GaussianDiffusion_DDPM(DiffusionModel):
     with a few changes listed above to support DaLL*E 2.
     """
 
-    def __init__(self, config: DotConfig):
+    def __init__(self, config: DotConfig, vae: Optional[torch.nn.Module] = None):
         super().__init__()
         self._config = config
+        self._latent_scale_factor = -1.0
 
         if config.diffusion.parameterization == "epsilon":
             self._prediction_type = PredictionType.EPSILON
@@ -97,6 +100,26 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         else:
             self._sde = None
 
+        if "normalize" in config.data:
+            self._normalize = get_obj_from_str(config.data.normalize)
+        else:
+            self._normalize = normalize_to_neg_one_to_one
+
+        if "unnormalize" in config.data:
+            self._unnormalize = get_obj_from_str(config.data.unnormalize)
+        else:
+            self._unnormalize = unnormalize_to_zero_to_one
+
+        # If we are a latent diffusion model, then create the latent encoder
+        self._latent_encoder = vae
+        if vae is None and "latent_encoder" in self._config.diffusion:
+            print("Loading uninitialized latent encoder.")
+            self._latent_encoder = instantiate_from_config(
+                config.diffusion.latent_encoder.to_dict()
+            )
+        if self._latent_encoder is not None:
+            freeze(self._latent_encoder)
+
     def models(self) -> List[DiffusionModel]:
         return [self]
 
@@ -135,7 +158,23 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         # The images are normalized into the range (-1, 1),
         # from Section 3.3:
         # "We assume that image data consists of integers in {0, 1, . . . , 255} scaled linearly to [−1, 1]."
-        x_0 = normalize_to_neg_one_to_one(images)
+        x_0 = self._normalize(images)
+
+        # Encode the normalized images into latents to send to the score network
+        if self._latent_encoder is not None:
+            z_0 = self._latent_encoder.encode_to_latents(x_0)
+
+            if self._latent_scale_factor == -1.0:
+                del self._latent_scale_factor
+                self.register_buffer(
+                    "_latent_scale_factor", 1.0 / z_0.detach().flatten().std()
+                )
+                print(f"Latent scale factor: {self._latent_scale_factor}")
+
+            # Scale the latents
+            z_0 = z_0 * self._latent_scale_factor
+        else:
+            z_0 = x_0
 
         # Line 3, calculate the random timesteps for the training batch.
         # Use importance sampling here if desired.
@@ -149,17 +188,17 @@ class GaussianDiffusion_DDPM(DiffusionModel):
 
         # Line 4, sample from a Gaussian with mean 0 and unit variance.
         # This is the epsilon prediction target.
-        epsilon = torch.randn_like(x_0)
+        epsilon = torch.randn_like(z_0)
 
         # Calculate forward process q_t
-        x_t = self._noise_scheduler.q_sample(x_start=x_0, t=t, noise=epsilon)
+        x_t = self._noise_scheduler.q_sample(x_start=z_0, t=t, noise=epsilon)
 
         # If there is a mask in the context, then we need to only select
         # the elements of x_t that are unmasked, the others remain x_0.
         # A zero is the mask means use x_0, otherwise use x_t
         if "video_mask" in context:
             # video_mask is (B,T)
-            x_t = torch.where(context["video_mask"][:, None, :, None, None], x_t, x_0)
+            x_t = torch.where(context["video_mask"][:, None, :, None, None], x_t, z_0)
 
         # Perform classifier free guidance over the context. This means
         # jointly train a conditional and unconditional model.
@@ -225,10 +264,10 @@ class GaussianDiffusion_DDPM(DiffusionModel):
             prediction_target = epsilon
         elif self._prediction_type == PredictionType.V:
             prediction_target = self._noise_scheduler.predict_v_from_x_and_epsilon(
-                x=x_0, epsilon=epsilon, t=t
+                x=z_0, epsilon=epsilon, t=t
             )
         elif self._prediction_type == PredictionType.RECTIFIED_FLOW:
-            prediction_target = x_0 - epsilon
+            prediction_target = z_0 - epsilon
         else:
             raise NotImplemented(
                 f"Prediction type {self._prediction_type} not implemented."
@@ -248,7 +287,7 @@ class GaussianDiffusion_DDPM(DiffusionModel):
             frozen_out = [model_prediction.detach(), learned_variance]
             vb_loss = self._vb_bits_per_dim(
                 epsilon_v_param=frozen_out,
-                x_0=x_0,
+                x_0=z_0,
                 x_t=x_t,
                 context=context,
                 clip_denoised=False,
@@ -294,11 +333,12 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         B, _, H, W = images.shape
         device = images.device
         context = context.copy()
+        assert self._latent_encoder is None
 
         # The images are normalized into the range (-1, 1),
         # from Section 3.3:
         # "We assume that image data consists of integers in {0, 1, . . . , 255} scaled linearly to [−1, 1]."
-        x_0 = normalize_to_neg_one_to_one(images)
+        x_0 = self._normalize(images)
 
         # Line 3, calculate the random timesteps for the training batch.
         # Use importance sampling here if desired.
@@ -500,20 +540,23 @@ class GaussianDiffusion_DDPM(DiffusionModel):
             Tensor batch of samples from the model.
         """
         # The output shape of the data.
+        s = self._config.diffusion.sampling.output_spatial_size
+        output_spatial_size = [s[0], s[1]] if isinstance(s, list) else [s, s]
+
         if "output_frames" in self._config.diffusion.sampling.to_dict():
             shape = (
                 num_samples,
                 self._config.diffusion.sampling.output_channels,
                 self._config.diffusion.sampling.output_frames,
-                self._config.diffusion.sampling.output_spatial_size,
-                self._config.diffusion.sampling.output_spatial_size,
+                output_spatial_size[0],
+                output_spatial_size[1],
             )
         else:
             shape = (
                 num_samples,
                 self._config.diffusion.sampling.output_channels,
-                self._config.diffusion.sampling.output_spatial_size,
-                self._config.diffusion.sampling.output_spatial_size,
+                output_spatial_size[0],
+                output_spatial_size[1],
             )
         device = next(self.parameters()).device
         self.eval()
@@ -559,7 +602,13 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         latents = latent_samples
 
         # Decode the samples from the latent space
-        samples = unnormalize_to_zero_to_one(latents)
+        if self._latent_encoder is not None:
+            latents = self._latent_encoder.decode_from_latents(
+                latents / self._latent_scale_factor
+            )
+
+        # And denormalize the samples from the latent space
+        samples = self._unnormalize(latents)
         self.train()
         return samples, intermediate_outputs
 
@@ -592,7 +641,12 @@ class GaussianDiffusion_DDPM(DiffusionModel):
 
         B = batch_size
         C = self._config.data.num_channels
-        H = W = self._config.data.image_size
+
+        s = self._config.data.image_size
+        image_size = [s[0], s[1]] if isinstance(s, list) else [s, s]
+
+        H = image_size[0]
+        W = image_size[1]
         is_video = (
             True if "input_number_of_frames" in self._config.data.to_dict() else False
         )
@@ -647,6 +701,8 @@ class GaussianDiffusion_DDPM(DiffusionModel):
             summary_context = preprocessor(summary_context, device=device)
 
         # Monkey path torch summary to deal with str inputs from text prompts
+        s = self._config.diffusion.score_network.params.input_spatial_size
+        input_spatial_size = [s[0], s[1]] if isinstance(s, list) else [s, s]
         fix_torchinfo_for_str()
         summary(
             self._score_network.to(device),
@@ -656,16 +712,16 @@ class GaussianDiffusion_DDPM(DiffusionModel):
                         batch_size,
                         self._config.diffusion.score_network.params.input_channels,
                         self._config.diffusion.score_network.params.input_number_of_frames,
-                        self._config.diffusion.score_network.params.input_spatial_size,
-                        self._config.diffusion.score_network.params.input_spatial_size,
+                        input_spatial_size[0],
+                        input_spatial_size[1],
                         device=device,
                     )
                     if is_video
                     else torch.rand(
                         batch_size,
                         self._config.diffusion.score_network.params.input_channels,
-                        self._config.diffusion.score_network.params.input_spatial_size,
-                        self._config.diffusion.score_network.params.input_spatial_size,
+                        input_spatial_size[0],
+                        input_spatial_size[1],
                         device=device,
                     )
                 ),
@@ -787,7 +843,7 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         intermediate_outputs = []
 
         if save_intermediate_outputs:
-            intermediate_outputs.append(unnormalize_to_zero_to_one(x_t))
+            intermediate_outputs.append(self._unnormalize(x_t))
 
         sampler = sampler if sampler is not None else self._reverse_process_sampler
         for timestep_idx in tqdm(
@@ -856,7 +912,7 @@ class GaussianDiffusion_DDPM(DiffusionModel):
                 )
 
             if save_intermediate_outputs:
-                intermediate_outputs.append(unnormalize_to_zero_to_one(x_t))
+                intermediate_outputs.append(self._unnormalize(x_t))
 
         return x_t, intermediate_outputs
 

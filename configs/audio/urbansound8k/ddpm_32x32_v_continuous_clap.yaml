@@ -1,13 +1,13 @@
 # V parameterized CLIP-conditioned image DDPM model, no learned sigma,
-# using continuous time formulation. This model serves as the pretrained
-# image diffusion model for make_a_video.yaml.
+# using continuous time formulation. This is a latent diffusion model, which
+# accepts latents of shape (4, 16, 32).
 diffusion:
   parameterization: "v"
   # Sampling section determines the size of the sampled output
   # from the model, and defines the sampling method used
   sampling:
-    output_channels: 1
-    output_spatial_size: 32
+    output_channels: 4
+    output_spatial_size: [16, 32]
     target: xdiffusion.samplers.ancestral.AncestralSampler
     params: {}
   # The noise scheduler to use with the forward diffusion process.
@@ -27,12 +27,8 @@ diffusion:
   context_preprocessing:
       # The Prompts Preprocessor converts the list of text prompts in the context
       # into a batch of text tokens of shape (B, text_context_size)
-      - target: xdiffusion.context.T5TextPromptsPreprocessor
-        params:
-          # The max length of the text token sequence
-          max_length: 77
-          # The name of the T5 text model to use
-          model_name: "google/t5-v1_1-base"
+      - target: xdiffusion.context.IgnoreContextAdapter
+        params: {}
   # A preprocessor for input to the model.
   input_preprocessing:
     target: xdiffusion.context.IgnoreInputPreprocessor
@@ -52,16 +48,36 @@ diffusion:
     unconditional_context:
       target: xdiffusion.context.UnconditionalTextPromptsAdapter
       params: {}
+  latent_encoder:
+    target: xdiffusion.autoencoders.kl.AutoencoderKL
+    params:
+      # Configuration for an audio autoencoder with a latent space of 4x16x32,
+      # which accepts input data of shape (1, 128, 256)
+      embed_dim: 4
+      loss_config:
+        target: torch.nn.Identity
+        params: {}
+      encoder_decoder_config:
+        double_z: True
+        z_channels: 4
+        resolution: 256
+        in_channels: 1
+        out_ch: 1
+        ch: 128
+        ch_mult: [1,2,2,2]  # num_down = len(ch_mult)-1
+        num_res_blocks: 2
+        attn_resolutions: [64,32]
+  dropout: 0.0
   # Defines the score network for predicting the noise parameter
   score_network:
     target: xdiffusion.score_networks.unet.Unet
     params:
       # The number of input channels to the model.
-      input_channels: 1
+      input_channels: 4
       # The number of output channels to the model.
-      output_channels: 1
+      output_channels: 4
       # The spatial size of the input to the model.
-      input_spatial_size: 32
+      input_spatial_size: [16, 32]
       # The number of features/channels at the start of
       # the network. This defines the inner dimensions
       # of the model.
@@ -104,7 +120,7 @@ diffusion:
       conditioning:
         # The signals (keys in the dictionary) that are available in the conditioning
         # context.
-        signals: ["timestep", "text_tokens"]
+        signals: ["timestep", "text_embedding"]
         projections:
           # A projection to apply to the integer timesteps.
           timestep:
@@ -118,12 +134,11 @@ diffusion:
               clip_min: -20
               clip_max: 20
           # A projection to apply to the text tokens in the conditioning context.
-          text_tokens:
+          text_embedding:
             # Defines an embedding which goes from text tokens at the given
             # vocabulary size to text token embeddings.
-            target: xdiffusion.layers.embedding.T5TextTokensToEmbedding
-            params:
-              model_name: "google/t5-v1_1-base"
+            target: xdiffusion.layers.clap.FrozenCLAPTextEmbedder
+            params: {}
         # The context transformer to use at the top of the score network. This transforms
         # the context with a shared set of parameters.
         context_transformer_head:
@@ -133,10 +148,12 @@ diffusion:
               input_context_key: "logsnr_t"
               output_context_key: "timestep_embedding"
               projection_key: "timestep"
-          # Projects the text tokens into text embeddings using the projection
-          # defined for "text_tokens"
-          - target: xdiffusion.context.TextTokenProjectionAdapter
-            params: {}
+          # prompts -> text embeddings embedding
+          - target: xdiffusion.layers.embedding.RunProjection
+            params:
+              input_context_key: "text_prompts"
+              output_context_key: "text_embeddings"
+              projection_key: "text_embedding"
         # The context transformer to use at each attention layer. This transforms
         # the context with a different set of parameters at each attention layer.
         context_transformer_layer:
@@ -145,7 +162,7 @@ diffusion:
             # The dimensionality of the context signal coming in.
             # -1 signifies no context coming in, and this defaults to Multi-Head
             # self attention.
-            context_dim: 768
+            context_dim: 1024
             # The number of heads in the attention layer.
             heads: 2
             # The dimensionality of each attention head.
@@ -159,12 +176,15 @@ diffusion:
                 # For the cross attention, we want to operate on the embedding dimension,
                 # not the token sequence length.
                 swap_context_channels: True
-# Describes the dataset used in training.
+# Describes the dataset used in training. Mel-spectrogram data
+# of shape: [128, 256] - 4 seconds of data
 data:
   # Spatial width/height of the data input to the model.
-  image_size: 32
+  image_size: [128, 256]
   # Number of channels in the input data
   num_channels: 1
   # The number of classes in the dataset
   num_classes: 10
+  normalize: xdiffusion.layers.audio.mel_to_logmel
+  unnormalize: xdiffusion.layers.audio.logmel_to_mel
 
