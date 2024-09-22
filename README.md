@@ -105,7 +105,7 @@ The following is a list of the supported audio diffusion models, their current r
 
 | Date  | Name  | Paper | Config | Results | Instructions
 | :---- | :---- | ----- | ------ | ----- | -----
-| January 2023 | Make-An-Audio | [Make-An-Audio: Text-To-Audio Generation with Prompt-Enhanced Diffusion Models](https://arxiv.org/abs/2301.12661) | | | 
+| January 2023 | Make-An-Audio | [Make-An-Audio: Text-To-Audio Generation with Prompt-Enhanced Diffusion Models](https://arxiv.org/abs/2301.12661) | [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/audio/urbansound8k/make_an_audio.yaml) | | [instructions](https://github.com/swookey-thinky/xdiffusion/blob/main/docs/audio/make_an_audio.md)
 | January 2023 | AudioLDM | [AudioLDM: Text-to-Audio Generation with Latent Diffusion Models](https://arxiv.org/abs/2301.12503) | | |
 | August 2023 | AudioLDM 2 | [AudioLDM 2: Learning Holistic Audio Generation with Self-supervised Pretraining](https://arxiv.org/abs/2308.05734) | | |
 | August 2023 | MusicLDM | [MusicLDM: Enhancing Novelty in Text-to-Music Generation Using Beat-Synchronous Mixup Strategies](https://arxiv.org/abs/2308.01546) | | |
