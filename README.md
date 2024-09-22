@@ -35,6 +35,7 @@ The following is a list of the supported image models, their current results, an
 
 | Date  | Name  | Paper | Config | Results | Instructions
 | :---- | :---- | ----- | ------ | ----- | -----
+| June 2020 | DDPM | [Denoising Diffusion Probabilistic Models](https://arxiv.org/abs/2006.11239) | [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/ddpm_32x32_epsilon_discrete.yaml) | ![DDPM](https://drive.google.com/uc?export=view&id=1Yd8hhK9EhFMhfqQJf3CjAtFqK_XdZPSi)| [instructions](https://github.com/swookey-thinky/xdiffusion/blob/main/docs/image/ddpm.md)
 | November 2020 | Score-SDE | [Score-Based Generative Modeling through Stochastic Differential Equations](https://arxiv.org/abs/2011.13456) | [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/score_sde_subvpsde.yaml) | ![Sub-VPE SDE](https://drive.google.com/uc?export=view&id=1SPCFu0aFkcfXKpmLE2p3RteIZ-dCBeuA)| [instructions](https://github.com/swookey-thinky/xdiffusion/blob/main/docs/image/score_sde.md)
 | May 2022 | Imagen | [Photorealistic Text-to-Image Diffusion Models with Deep Language Understanding](https://arxiv.org/abs/2205.11487) | [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/imagen.yaml) |  ![Imagen](https://drive.google.com/uc?export=view&id=1MKyRgPKoPRFHLzd78aTA1K3QHgNm08Px) | [instructions](https://github.com/swookey-thinky/xdiffusion/blob/main/docs/image/imagen.md)
 | June 2022 | EDM | [Elucidating the Design Space of Diffusion-Based Generative Models](https://arxiv.org/abs/2206.00364) | [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/edm.yaml) |  ![EDM](https://drive.google.com/uc?export=view&id=1yUeR5ep9mK1IwMsTyHwhyAqlftFwBNYz) | [instructions](https://github.com/swookey-thinky/xdiffusion/blob/main/docs/image/edm.md)
@@ -70,7 +71,7 @@ The following is a list of the supported video models, their current results, an
 | February 2023 | | [Structure and Content-Guided Video Synthesis with Diffusion Models](https://arxiv.org/abs/2302.03011) | | |
 | March 2023 | Text2Video-Zero | [Text2Video-Zero: Text-to-Image Diffusion Models are Zero-Shot Video Generators](https://arxiv.org/abs/2303.13439) | | |
 | April 2023 | Video LDM | [Align your Latents: High-Resolution Video Synthesis with Latent Diffusion Models](https://arxiv.org/abs/2304.08818) | [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/video/moving_mnist/video_ldm.yaml) | ![Video LDM](https://drive.google.com/uc?export=view&id=1UsKoMKyaeQspVGxNhhowWx7OQ57XEIiH) | [instructions](https://github.com/swookey-thinky/xdiffusion/blob/main/docs/video/video_ldm.md)
-| July 2023 | AnimateDiff | [AnimateDiff: Animate Your Personalized Text-to-Image Diffusion Models without Specific Tuning](https://arxiv.org/abs/2307.04725) | | |
+| July 2023 | AnimateDiff | [AnimateDiff: Animate Your Personalized Text-to-Image Diffusion Models without Specific Tuning](https://arxiv.org/abs/2307.04725) | [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/video/moving_mnist/animate_diff.yaml) | ![Animate Diff](https://drive.google.com/uc?export=view&id=11EJWvEilKqmrGabCRvjM5CxW6I7mWEEg) | [instructions](https://github.com/swookey-thinky/xdiffusion/blob/main/docs/video/animate_diff.md) 
 | August 2023 | ModelScopeT2V | [ModelScope Text-to-Video Technical Report](https://arxiv.org/abs/2308.06571) | | |
 | September 2023 | Show-1 | [Show-1: Marrying Pixel and Latent Diffusion Models for Text-to-Video Generation](https://arxiv.org/abs/2309.15818) | | |
 | September 2023 | LaVie | [LAVIE: High-Quality Video Generation with Cascaded Latent Diffusion Models](https://arxiv.org/abs/2309.15103) | | |
@@ -105,6 +106,9 @@ The following is a list of the supported audio diffusion models, their current r
 | Date  | Name  | Paper | Config | Results | Instructions
 | :---- | :---- | ----- | ------ | ----- | -----
 | January 2023 | Make-An-Audio | [Make-An-Audio: Text-To-Audio Generation with Prompt-Enhanced Diffusion Models](https://arxiv.org/abs/2301.12661) | | | 
+| January 2023 | AudioLDM | [AudioLDM: Text-to-Audio Generation with Latent Diffusion Models](https://arxiv.org/abs/2301.12503) | | |
+| August 2023 | AudioLDM 2 | [AudioLDM 2: Learning Holistic Audio Generation with Self-supervised Pretraining](https://arxiv.org/abs/2308.05734) | | |
+| August 2023 | MusicLDM | [MusicLDM: Enhancing Novelty in Text-to-Music Generation Using Beat-Synchronous Mixup Strategies](https://arxiv.org/abs/2308.01546) | | |
 | July 2024 | Stable Audio Open | [Stable Audio Open](https://arxiv.org/abs/2407.14358) | | | 
 
 ## TODO

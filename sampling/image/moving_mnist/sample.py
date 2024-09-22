@@ -19,7 +19,7 @@ from xdiffusion.diffusion.cascade import GaussianDiffusionCascade
 from xdiffusion.lora import load_lora_weights
 from xdiffusion.samplers import ddim, ancestral, base
 
-OUTPUT_NAME = "output/image/mnist/sample"
+OUTPUT_NAME = "output/image/moving_mnist/sample"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
@@ -114,7 +114,7 @@ def sample(
 
     # Sample from the model to check the quality.
     classes = torch.randint(
-        0, config.data.num_classes, size=(num_samples,), device=device
+        0, config.data.num_classes, size=(num_samples, 2), device=device
     )
     prompts = convert_labels_to_prompts(classes)
     context["text_prompts"] = prompts
@@ -175,7 +175,7 @@ def convert_labels_to_prompts(labels: torch.Tensor) -> List[str]:
 
     # First convert the labels into a list of string prompts
     prompts = [
-        text_labels[labels[i]][torch.randint(0, len(text_labels[labels[i]]), size=())]
+        f"{text_labels[labels[i][0]][torch.randint(0, len(text_labels[labels[i][0]]), size=())]} and {text_labels[labels[i][1]][torch.randint(0, len(text_labels[labels[i][1]]), size=())]}"
         for i in range(labels.shape[0])
     ]
     return prompts

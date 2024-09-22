@@ -10,7 +10,7 @@ from xdiffusion.layers.utils import RMSNorm
 
 
 def attention(
-    q: Tensor, k: Tensor, v: Tensor, pe: Tensor, attn_mask: Tensor = None
+    q: Tensor, k: Tensor, v: Tensor, pe: Tensor, attn_mask: Optional[Tensor] = None
 ) -> Tensor:
     q, k = apply_rope(q, k, pe)
 
@@ -284,7 +284,9 @@ class SingleStreamBlock(nn.Module):
         self.mlp_act = nn.GELU(approximate="tanh")
         self.modulation = Modulation(hidden_size, double=False)
 
-    def forward(self, x: Tensor, vec: Tensor, pe: Tensor) -> Tensor:
+    def forward(
+        self, x: Tensor, vec: Tensor, pe: Tensor, attn_mask: Optional[Tensor] = None
+    ) -> Tensor:
         """Forward pass of block.
 
         Args:
@@ -302,7 +304,8 @@ class SingleStreamBlock(nn.Module):
         q, k = self.norm(q, k, v)
 
         # compute attention
-        attn = attention(q, k, v, pe=pe)
+        attn = attention(q, k, v, pe=pe, attn_mask=attn_mask)
+
         # compute activation in mlp stream, cat again and run second linear layer
         # This is the parallel attention/MLP layers from https://arxiv.org/abs/2302.05442.
         output = self.linear2(torch.cat((attn, self.mlp_act(mlp)), 2))
