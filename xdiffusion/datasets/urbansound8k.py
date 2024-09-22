@@ -29,9 +29,8 @@ class UrbanSound8k(Dataset):
             download_file_from_google_drive(file_id, filename)
 
         videos_file_name = os.path.join(root_dir, "UrbanSound8k/urbansound8k.npz")
-
-        _AUDIO_URL = "https://drive.google.com/uc?export=view&id=1Hii6NpDzAyA4L0wXfOrPr_FTHJGA6RUq"
-        _AUDIO_FILE_ID = "1Hii6NpDzAyA4L0wXfOrPr_FTHJGA6RUq"
+        _AUDIO_URL = "https://drive.google.com/uc?export=view&id=186mCHedZ_hfnTazOCFsPFUshxGFzd3qV"
+        _AUDIO_FILE_ID = "186mCHedZ_hfnTazOCFsPFUshxGFzd3qV"
 
         if not os.path.isfile(videos_file_name):
             download(videos_file_name, _AUDIO_URL, _AUDIO_FILE_ID)
