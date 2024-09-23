@@ -105,35 +105,33 @@ class Chewie(nn.Module):
         self.final_layer = LastLayer(self.hidden_size, 1, self.out_channels)
 
     def forward(self, x: Tensor, context: Dict, **kwargs) -> Tensor:
+        # Pull out internal entries from the context
+        guidance = (
+            context["distillation_guidance"]
+            if "distillation_guidance" in context
+            else None
+        )
+
         # Patch embed the input
-        B, C, F, H, W = x.shape
+        B, C, H, W = x.shape
         img = rearrange(
             x,
-            "b c f (h ph) (w pw) -> b (f h w) (c ph pw)",
+            "b c (h ph) (w pw) -> b (h w) (c ph pw)",
             ph=self.patch_size,
             pw=self.patch_size,
         )
         img_ids = torch.zeros(
-            F, H // self.patch_size, W // self.patch_size, 3, device=x.device
+            H // self.patch_size, W // self.patch_size, 3, device=x.device
         )
-
-        # Add the position indices for position embedding (using ROPE).
-        max_tokens = (H // self.patch_size) * (W // self.patch_size)
-        for i in range(F):
-            base_idx = i * max_tokens
-            img_ids[i, :, :, 1] = (
-                img_ids[i, :, :, 1]
-                + torch.arange(
-                    start=base_idx, end=base_idx + H // self.patch_size, device=x.device
-                )[:, None]
-            )
-            img_ids[i, :, :, 2] = (
-                img_ids[i, :, :, 2]
-                + torch.arange(
-                    start=base_idx, end=base_idx + W // self.patch_size, device=x.device
-                )[None, :]
-            )
-        img_ids = repeat(img_ids, "f h w c -> b (f h w) c", b=B)
+        img_ids[..., 1] = (
+            img_ids[..., 1]
+            + torch.arange(H // self.patch_size, device=x.device)[:, None]
+        )
+        img_ids[..., 2] = (
+            img_ids[..., 2]
+            + torch.arange(W // self.patch_size, device=x.device)[None, :]
+        )
+        img_ids = repeat(img_ids, "h w c -> b (h w) c", b=B)
 
         # txt is the T5 text embeddings
         txt = context["t5_text_embeddings"]
@@ -146,45 +144,15 @@ class Chewie(nn.Module):
         if img.ndim != 3 or txt.ndim != 3:
             raise ValueError("Input img and txt tensors must have 3 dimensions.")
 
-        joint_attention_mask = None
-        if "is_image_batch" in context and context["is_image_batch"]:
-            # The joint training mask tells us which frames are temporally
-            # coherent video frames, and which frames are independent
-            # images.
-            TXT_T = txt.shape[1]
-            IMG_T = img.shape[1]
-            T = TXT_T + IMG_T
-            joint_training_mask = torch.zeros((T, T), dtype=torch.bool, device=x.device)
-            # Text tokens can attend amongst themselves
-            joint_training_mask[:TXT_T, :TXT_T] = True
-
-            # Make sure the image tokens can attend to the text tokens
-            for i in range(IMG_T):
-                joint_training_mask[TXT_T + i, :TXT_T] = True
-
-            # Make sure the diagonal is all true (self attend)
-            joint_training_mask[range(T), range(T)] = True
-            joint_attention_mask = joint_training_mask
-            # joint_attention_mask = torch.where(joint_training_mask, 0.0, float("-inf"))
-
-            # Update the image_ids for positional embedding, since each frame is now
-            # independent, so each frame will have the same image_id sequence.
-            img_ids = torch.zeros(
-                H // self.patch_size, W // self.patch_size, 3, device=x.device
-            )
-            img_ids[..., 1] = (
-                img_ids[..., 1]
-                + torch.arange(H // self.patch_size, device=x.device)[:, None]
-            )
-            img_ids[..., 2] = (
-                img_ids[..., 2]
-                + torch.arange(W // self.patch_size, device=x.device)[None, :]
-            )
-            img_ids = repeat(img_ids, "h w c -> b (f h w) c", b=B, f=F)
-
         # running on sequences img
         img = self.img_in(img)
         vec = self.time_in(timestep_embedding(timesteps, 256))
+        if self.params.guidance_embed:
+            if guidance is None:
+                raise ValueError(
+                    "Didn't get guidance strength for guidance distilled model."
+                )
+            vec = vec + self.guidance_in(timestep_embedding(guidance, 256))
         vec = vec + self.vector_in(y)
         txt = self.txt_in(txt)
 
@@ -192,9 +160,7 @@ class Chewie(nn.Module):
         pe = self.pe_embedder(ids)
 
         for block in self.double_blocks:
-            img, txt = block(
-                img=img, txt=txt, vec=vec, pe=pe, attn_mask=joint_attention_mask
-            )
+            img, txt = block(img=img, txt=txt, vec=vec, pe=pe)
 
         img = torch.cat((txt, img), 1)
         for block in self.single_blocks:
@@ -206,12 +172,11 @@ class Chewie(nn.Module):
         # Unpatchify the output
         img = rearrange(
             img,
-            "b (f h w) (c ph pw) -> b c f (h ph) (w pw)",
+            "b (h w) (c ph pw) -> b c (h ph) (w pw)",
             ph=self.patch_size,
             pw=self.patch_size,
             h=H // self.patch_size,
             w=W // self.patch_size,
-            f=F,
         )
         assert img.shape == x.shape
         return img
