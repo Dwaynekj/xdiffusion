@@ -13,7 +13,7 @@ There is a very good introduction to this technique in the [clonofsimo]() reposi
 
 Well, what's the alternative? In the domain of LLM, researchers have developed Efficient fine-tuning methods. LoRA, especially, tackles the very problem the community currently has: end users with Open-sourced stable-diffusion model want to try various other fine-tuned model that is created by the community, but the model is too large to download and use. LoRA instead attempts to fine-tune the "residual" of the model instead of the entire model: i.e., train the `ΔW` instead of `W`.
 
-<p align=center>"""W′ = W + ΔW"""</p>
+<p align=center>`W = W + ΔW`</p>
 
 Where we can further decompose `ΔW` into low-rank matrices: `ΔW = AB^T`, where `A ∈ R^(n×d)`,`B ∈ R^(m×d)`, `d<<n`. This is the key idea of LoRA. We can then fine-tune `A` and `B` instead of `W`. In the end, you get an insanely small model as `A` and `B` are much smaller than `W`.
 
