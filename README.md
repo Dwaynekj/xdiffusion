@@ -110,8 +110,10 @@ The following is a list of the supported audio diffusion models, their current r
 | :---- | :---- | ----- | ------ | ----- | -----
 | January 2023 | Make-An-Audio | [Make-An-Audio: Text-To-Audio Generation with Prompt-Enhanced Diffusion Models](https://arxiv.org/abs/2301.12661) | [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/audio/urbansound8k/make_an_audio.yaml) | | [instructions](https://github.com/swookey-thinky/xdiffusion/blob/main/docs/audio/make_an_audio.md)
 | January 2023 | AudioLDM | [AudioLDM: Text-to-Audio Generation with Latent Diffusion Models](https://arxiv.org/abs/2301.12503) | | |
+| June 2023 | VoiceBox | [Voicebox: Text-Guided Multilingual Universal Speech Generation at Scale](https://arxiv.org/abs/2306.15687) | | |
 | August 2023 | AudioLDM 2 | [AudioLDM 2: Learning Holistic Audio Generation with Self-supervised Pretraining](https://arxiv.org/abs/2308.05734) | | |
 | August 2023 | MusicLDM | [MusicLDM: Enhancing Novelty in Text-to-Music Generation Using Beat-Synchronous Mixup Strategies](https://arxiv.org/abs/2308.01546) | | |
+| December 2023 | AudioBox | [Audiobox: Unified Audio Generation with Natural Language Prompts](https://arxiv.org/abs/2312.15821) | | |
 | July 2024 | Stable Audio Open | [Stable Audio Open](https://arxiv.org/abs/2407.14358) | | | 
 
 ## TODO
