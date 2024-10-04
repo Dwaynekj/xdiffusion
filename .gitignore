@@ -3,3 +3,6 @@ MNIST/
 output/
 lpips/
 MovingMNIST/
+build/
+dist/
+xdiffusion.egg-info/
