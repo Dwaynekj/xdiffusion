@@ -9,7 +9,7 @@ from einops import reduce
 import numpy as np
 import torch
 from torchinfo import summary
-from tqdm import tqdm
+from tqdm.autonotebook import tqdm
 from typing import Callable, Dict, List, Optional, Tuple, Union
 from typing_extensions import Self
 
