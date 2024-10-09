@@ -39,15 +39,14 @@ diffusion:
     # Unconditional guidance probability
     unconditional_guidance_probability: 0.2
     # The context signals to apply guidance to.
-    signals: ["classes"]
+    signals: ["text_prompts"]
     # For classifier free guidance, we need the ability to create an unconditional
     # context given the conditional context. This unconditional context needs
     # to be applied in both training and sampling, and will return a new
     # context dictionary given the original context dictionary.
     unconditional_context:
-      target: xdiffusion.context.UnconditionalClassesAdapter
-      params:
-        num_classes: 10
+      target: xdiffusion.context.UnconditionalTextPromptsAdapter
+      params: {}
   dynamic_thresholding:
     enable: True
     p: 0.99
@@ -59,13 +58,17 @@ diffusion:
       n_layers: 12
       d_model: 256 # Dimensionality of each token
       d_input: 1 # Number of input channels
-      input_width: 32
-      input_height: 32
+      # The number of input channels to the model.
+      input_channels: 1
+      # The number of output channels to the model.
+      output_channels: 1
+      # The spatial size of the input to the model.
+      input_spatial_size: 32
       M: 2 # M = L / J - the upscale downscale ratio
-
-      residual_config:
-        target: xdiffusion.layers.residual.Residual
-        params: {}
+      # Does the model include a learned sigma or a fixed sigma.
+      is_learned_sigma: False
+      # True if this is a class conditional model
+      is_class_conditional: True
 
       block_config:
         target: xdiffusion.layers.sequence.SequenceResidualBlock

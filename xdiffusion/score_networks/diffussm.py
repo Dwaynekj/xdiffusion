@@ -26,7 +26,7 @@ class DiffusionSSMBlock(torch.nn.Module):
         self._condition_embedder = MLPEmbedder(in_dim=256, hidden_dim=config.d_model)
 
         # Hourglass module before going into the SSM
-        L = config.input_width * config.input_height
+        L = config.input_spatial_size**2
         J = L // config.M
         self._hourglass_ratio = config.M
         self._hourglass = torch.nn.Sequential(
