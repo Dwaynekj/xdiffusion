@@ -6,6 +6,7 @@ from itertools import repeat
 import math
 import numpy as np
 import torch
+from typing import Sequence, Mapping
 
 
 def conv_nd(dims, *args, **kwargs):
@@ -311,3 +312,176 @@ class RMSNorm(torch.nn.Module):
         x = x.float()
         rrms = torch.rsqrt(torch.mean(x**2, dim=-1, keepdim=True) + self.eps)
         return (x * rrms).to(dtype=x_dtype) * self.scale
+
+
+def is_list(x):
+    return isinstance(x, Sequence) and not isinstance(x, str)
+
+
+def is_dict(x):
+    return isinstance(x, Mapping)
+
+
+def to_dict(x, recursive=True):
+    """Convert Sequence or Mapping object to dict.
+
+    lists get converted to {0: x[0], 1: x[1], ...}
+    """
+    if is_list(x):
+        x = {i: v for i, v in enumerate(x)}
+    if is_dict(x):
+        if recursive:
+            return {k: to_dict(v, recursive=recursive) for k, v in x.items()}
+        else:
+            return dict(x)
+    else:
+        return x
+
+
+def to_list(x, recursive=False):
+    """Convert an object to list.
+
+    If Sequence (e.g. list, tuple, Listconfig): just return it
+
+    Special case: If non-recursive and not a list, wrap in list
+    """
+    if is_list(x):
+        if recursive:
+            return [to_list(_x) for _x in x]
+        else:
+            return list(x)
+    else:
+        if recursive:
+            return x
+        else:
+            return [x]
+
+
+class DropoutNd(torch.nn.Module):
+    def __init__(self, p: float = 0.5, tie=True, transposed=True):
+        """
+        tie: tie dropout mask across sequence lengths (Dropout1d/2d/3d)
+        """
+        super().__init__()
+        if p < 0 or p >= 1:
+            raise ValueError(
+                "dropout probability has to be in [0, 1), " "but got {}".format(p)
+            )
+        self.p = p
+        self.tie = tie
+        self.transposed = transposed
+        self.binomial = torch.distributions.binomial.Binomial(probs=1 - self.p)
+
+    def forward(self, X):
+        """X: (batch, dim, lengths...)."""
+        if self.training:
+            if not self.transposed:
+                X = rearrange(X, "b ... d -> b d ...")
+            # binomial = torch.distributions.binomial.Binomial(probs=1-self.p) # This is incredibly slow because of CPU -> GPU copying
+            mask_shape = X.shape[:2] + (1,) * (X.ndim - 2) if self.tie else X.shape
+            # mask = self.binomial.sample(mask_shape)
+            mask = torch.rand(*mask_shape, device=X.device) < 1.0 - self.p
+            X = X * mask * (1.0 / (1 - self.p))
+            if not self.transposed:
+                X = rearrange(X, "b d ... -> b ... d")
+            return X
+        return X
+
+
+class Normalization(torch.nn.Module):
+    def __init__(
+        self,
+        d,
+        transposed=False,  # Length dimension is -1 or -2
+        _name_="layer",
+        **kwargs,
+    ):
+        super().__init__()
+        self.transposed = transposed
+        self._name_ = _name_
+
+        if _name_ == "layer":
+            self.channel = True  # Normalize over channel dimension
+            if self.transposed:
+                self.norm = TransposedLN(d, **kwargs)
+            else:
+                self.norm = torch.nn.LayerNorm(d, **kwargs)
+        elif _name_ == "instance":
+            self.channel = False
+            norm_args = {"affine": False, "track_running_stats": False}
+            norm_args.update(kwargs)
+            self.norm = torch.nn.InstanceNorm1d(
+                d, **norm_args
+            )  # (True, True) performs very poorly
+        elif _name_ == "batch":
+            self.channel = False
+            norm_args = {"affine": True, "track_running_stats": True}
+            norm_args.update(kwargs)
+            self.norm = torch.nn.BatchNorm1d(d, **norm_args)
+        elif _name_ == "group":
+            self.channel = False
+            self.norm = torch.nn.GroupNorm(1, d, **kwargs)
+        elif _name_ == "none":
+            self.channel = True
+            self.norm = torch.nn.Identity()
+        else:
+            raise NotImplementedError
+
+    def forward(self, x):
+        # Handle higher dimension logic
+        shape = x.shape
+        if self.transposed:
+            x = rearrange(x, "b d ... -> b d (...)")
+        else:
+            x = rearrange(x, "b ... d -> b (...) d")
+
+        # The cases of LayerNorm / no normalization are automatically handled in all cases
+        # Instance/Batch Norm work automatically with transposed axes
+        if self.channel or self.transposed:
+            x = self.norm(x)
+        else:
+            x = x.transpose(-1, -2)
+            x = self.norm(x)
+            x = x.transpose(-1, -2)
+
+        x = x.view(shape)
+        return x
+
+    def step(self, x, **kwargs):
+        assert self._name_ in ["layer", "none"]
+        if self.transposed:
+            x = x.unsqueeze(-1)
+        x = self.forward(x)
+        if self.transposed:
+            x = x.squeeze(-1)
+        return x
+
+
+class TransposedLN(torch.nn.Module):
+    """LayerNorm module over second dimension.
+
+    Assumes shape (B, D, L), where L can be 1 or more axis.
+    This is slow and a dedicated CUDA/Triton implementation shuld provide substantial end-to-end speedup.
+    """
+
+    def __init__(self, d, scalar=True):
+        super().__init__()
+        self.scalar = scalar
+        if self.scalar:
+            self.m = torch.nn.Parameter(torch.zeros(1))
+            self.s = torch.nn.Parameter(torch.ones(1))
+            setattr(self.m, "_optim", {"weight_decay": 0.0})
+            setattr(self.s, "_optim", {"weight_decay": 0.0})
+        else:
+            self.ln = torch.nn.LayerNorm(d)
+
+    def forward(self, x):
+        if self.scalar:
+            # calc. stats over D dim / channels
+            s, m = torch.std_mean(x, dim=1, unbiased=False, keepdim=True)
+            y = (self.s / s) * (x - m + self.m)
+        else:
+            # move channel to last axis, apply layer_norm, then move channel back to second axis
+            _x = self.ln(rearrange(x, "b d ... -> b ... d"))
+            y = rearrange(_x, "b ... d -> b d ...")
+        return y
