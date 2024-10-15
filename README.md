@@ -103,6 +103,7 @@ The following is a list of the supported video models, their current results, an
 | May 2024 | MOFA-VIdeo | [MOFA-Video: Controllable Image Animation via Generative Motion Field Adaptions in Frozen Image-to-Video Diffusion Model](https://arxiv.org/abs/2405.20222) | | |
 | October 2024 | Movie-Gen | [Movie Gen: A Cast of Media Foundation Models](https://ai.meta.com/static-resource/movie-gen-research-paper) | | |
 | October 2024 | Pyramid Flow | [Pyramidal Flow Matching for Efficient Video Generative Modeling](https://arxiv.org/abs/2410.05954) | | |
+| October 2024 | T2V-Turbo-v2 | [T2V-Turbo-v2: Enhancing Video Generation Model Post-Training through Data, Reward, and Conditional Guidance Design](https://arxiv.org/abs/2410.05677) | | |
 
 ## Audio Diffusion
 
