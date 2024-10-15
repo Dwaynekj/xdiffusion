@@ -102,6 +102,8 @@ The following is a list of the supported video models, their current results, an
 | May 2024 | FIFO-Diffusion | [FIFO-Diffusion: Generating Infinite Videos from Text without Training](https://arxiv.org/abs/2405.11473) | | |
 | May 2024 | MOFA-VIdeo | [MOFA-Video: Controllable Image Animation via Generative Motion Field Adaptions in Frozen Image-to-Video Diffusion Model](https://arxiv.org/abs/2405.20222) | | |
 | May 2024 | T2V-Turbo | [T2V-Turbo: Breaking the Quality Bottleneck of Video Consistency Model with Mixed Reward Feedback](https://arxiv.org/abs/2405.18750) | | |
+| July 2024 | Diffusion Forcing | [Diffusion Forcing: Next-token Prediction Meets Full-Sequence Diffusion](https://arxiv.org/abs/2407.01392) | | |
+| August 2024 | GameNGen | [Diffusion Models Are Real-Time Game Engines](https://arxiv.org/abs/2408.14837) | | |
 | October 2024 | Movie-Gen | [Movie Gen: A Cast of Media Foundation Models](https://ai.meta.com/static-resource/movie-gen-research-paper) | | |
 | October 2024 | Pyramid Flow | [Pyramidal Flow Matching for Efficient Video Generative Modeling](https://arxiv.org/abs/2410.05954) | | |
 | October 2024 | T2V-Turbo-v2 | [T2V-Turbo-v2: Enhancing Video Generation Model Post-Training through Data, Reward, and Conditional Guidance Design](https://arxiv.org/abs/2410.05677) | | |
@@ -113,6 +115,7 @@ The following is a list of the supported audio diffusion models, their current r
 
 | Date  | Name  | Paper | Config | Results | Instructions
 | :---- | :---- | ----- | ------ | ----- | -----
+| February 2022 | SaShiMi| [It's Raw! Audio Generation with State-Space Models](https://arxiv.org/abs/2202.09729) | | |
 | January 2023 | Make-An-Audio | [Make-An-Audio: Text-To-Audio Generation with Prompt-Enhanced Diffusion Models](https://arxiv.org/abs/2301.12661) | [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/audio/urbansound8k/make_an_audio.yaml) | | [instructions](https://github.com/swookey-thinky/xdiffusion/blob/main/docs/audio/make_an_audio.md)
 | January 2023 | AudioLDM | [AudioLDM: Text-to-Audio Generation with Latent Diffusion Models](https://arxiv.org/abs/2301.12503) | | |
 | June 2023 | VoiceBox | [Voicebox: Text-Guided Multilingual Universal Speech Generation at Scale](https://arxiv.org/abs/2306.15687) | | |
