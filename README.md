@@ -101,6 +101,7 @@ The following is a list of the supported video models, their current results, an
 | May 2024 | Vidu | [Vidu: a Highly Consistent, Dynamic and Skilled Text-to-Video Generator with Diffusion Models](https://arxiv.org/abs/2405.04233) | | |
 | May 2024 | FIFO-Diffusion | [FIFO-Diffusion: Generating Infinite Videos from Text without Training](https://arxiv.org/abs/2405.11473) | | |
 | May 2024 | MOFA-VIdeo | [MOFA-Video: Controllable Image Animation via Generative Motion Field Adaptions in Frozen Image-to-Video Diffusion Model](https://arxiv.org/abs/2405.20222) | | |
+| May 2024 | T2V-Turbo | [T2V-Turbo: Breaking the Quality Bottleneck of Video Consistency Model with Mixed Reward Feedback](https://arxiv.org/abs/2405.18750) | | |
 | October 2024 | Movie-Gen | [Movie Gen: A Cast of Media Foundation Models](https://ai.meta.com/static-resource/movie-gen-research-paper) | | |
 | October 2024 | Pyramid Flow | [Pyramidal Flow Matching for Efficient Video Generative Modeling](https://arxiv.org/abs/2410.05954) | | |
 | October 2024 | T2V-Turbo-v2 | [T2V-Turbo-v2: Enhancing Video Generation Model Post-Training through Data, Reward, and Conditional Guidance Design](https://arxiv.org/abs/2410.05677) | | |
