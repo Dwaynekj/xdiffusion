@@ -51,7 +51,7 @@ Output will be saved to the `output/image/mnist/sample/ddpm_32x32_v_continuous_c
 
 | Config | Checkpoint | Original Model | Applied LoRA Weights
 | ------ | ---------- | ------- | -------
-| [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/ddpm_32x32_v_continuous_clip.yaml) | [google drive](https://drive.google.com/file/d/1atzhtv-kRegnabROGZs6olxuVONiRQKI/view?usp=sharing) | ![LoRA Original](https://drive.google.com/uc?export=view&id=1_r8poe1SJxf8UtT4mmQaTT378m26hD-F) | ![LoRA](https://drive.google.com/uc?export=view&id=1NGtmYiLNAtOTC46UK7nbpkGf3NYfSVWI)
+| [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/ddpm_32x32_v_continuous_clip.yaml) | [google drive](https://drive.google.com/file/d/1gwNrELIf0K2gys4a4EM4wXsKxii0V8g3/view?usp=sharing) | ![LoRA Original](https://drive.google.com/uc?export=view&id=1_r8poe1SJxf8UtT4mmQaTT378m26hD-F) | ![LoRA](https://drive.google.com/uc?export=view&id=1NGtmYiLNAtOTC46UK7nbpkGf3NYfSVWI)
 
 
 ## Other Resources
