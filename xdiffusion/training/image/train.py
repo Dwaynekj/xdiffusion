@@ -321,7 +321,7 @@ def train(
                     step=step,
                     config=config,
                     num_samples=num_samples,
-                    output_path=output_path,
+                    output_path=OUTPUT_NAME,
                     convert_labels_to_prompts=convert_labels_to_prompts,
                     sample_with_guidance=sample_with_guidance,
                     validation_dataloader=validation_dataloader,
@@ -332,7 +332,7 @@ def train(
                     loss=loss,
                     optimizers=optimizers,
                     config=config,
-                    output_path=output_path,
+                    output_path=OUTPUT_NAME,
                     save_lora=use_lora_training,
                 )
                 average_loss = average_loss_cumulative / float(save_and_sample_every_n)
@@ -350,7 +350,7 @@ def train(
         step=step,
         config=config,
         num_samples=num_samples,
-        output_path=output_path,
+        output_path=OUTPUT_NAME,
         convert_labels_to_prompts=convert_labels_to_prompts,
         sample_with_guidance=sample_with_guidance,
         validation_dataloader=validation_dataloader,
@@ -361,7 +361,7 @@ def train(
         loss=loss,
         optimizers=optimizers,
         config=config,
-        output_path=output_path,
+        output_path=OUTPUT_NAME,
         save_lora=use_lora_training,
     )
 
