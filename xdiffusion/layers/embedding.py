@@ -592,14 +592,20 @@ class Timesteps(torch.nn.Module):
     def __init__(
         self,
         num_channels: int,
+        scale: float = 1.0,
+        flip_sin_to_cos: bool = True,
     ):
         super().__init__()
         self.num_channels = num_channels
+        self.flip_sin_to_cos = flip_sin_to_cos
+        self.scale = scale
 
     def forward(self, timesteps):
         t_emb = timestep_embedding(
             timesteps,
             self.num_channels,
+            flip_sin_to_cos=self.flip_sin_to_cos,
+            scale=self.scale,
         )
         return t_emb
 

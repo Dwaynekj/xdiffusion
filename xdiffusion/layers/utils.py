@@ -87,7 +87,9 @@ def normalization(channels):
     return GroupNorm32(32, channels)
 
 
-def timestep_embedding(timesteps, dim, max_period=10000):
+def timestep_embedding(
+    timesteps, dim, max_period=10000, scale: float = 1.0, flip_sin_to_cos: bool = True
+):
     """
     Create sinusoidal timestep embeddings.
 
@@ -104,7 +106,16 @@ def timestep_embedding(timesteps, dim, max_period=10000):
         / half
     ).to(device=timesteps.device)
     args = timesteps[:, None].float() * freqs[None]
-    embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+
+    # scale embeddings
+    args = scale * args
+
+    embedding = torch.cat([torch.sin(args), torch.cos(args)], dim=-1)
+
+    # flip sine and cosine embeddings
+    if flip_sin_to_cos:
+        embedding = torch.cat([embedding[:, half:], embedding[:, :half]], dim=-1)
+
     if dim % 2:
         embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
     return embedding

@@ -6,3 +6,4 @@ MovingMNIST/
 build/
 dist/
 xdiffusion.egg-info/
+.DS_Store

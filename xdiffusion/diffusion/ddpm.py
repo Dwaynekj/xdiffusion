@@ -637,7 +637,7 @@ class GaussianDiffusion_DDPM(DiffusionModel):
 
     def print_model_summary(self):
         batch_size = 4
-        device = "cuda"
+        device = "cuda" if torch.cuda.is_available() else "cpu"
 
         B = batch_size
         C = self._config.data.num_channels

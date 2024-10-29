@@ -46,3 +46,7 @@ Output will be saved to the `output/image/mnist/sample/diffussm` directory.
 | Config | Checkpoint | Results
 | ------ | ---------- | -------
 | [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/diffussm.yaml) | [Google Drive](https://drive.google.com/file/d/1i4jFXRS4enCexO4Zvgw_l54AfhYyo7Y9/view?usp=sharing) | ![DiffuSSM](https://drive.google.com/uc?export=view&id=1YKO1JUGeW9DbzqtGtA3HAz_gcNLKnBlZ)
+
+## References
+
+Unfortunately, the authors did not release their original source code. However, the DiffuSSM model is based on the S4D state space model, and there is an excellent repository for structured state spaces for sequence models at [S4](https://github.com/state-spaces/s4).
