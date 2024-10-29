@@ -65,7 +65,7 @@ class AncestralSampler(ReverseProcessSampler):
 
         timestep_idx = context["timestep_idx"]
         pred_img = torch.where(
-            torch.tensor(timestep_idx == 0),
+            torch.tensor(timestep_idx == 0, device=x.device),
             pred_xstart,
             model_mean + torch.exp(0.5 * model_log_variance) * noise,
         )

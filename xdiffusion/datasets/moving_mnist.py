@@ -13,7 +13,52 @@ import requests
 import sys
 import torch
 from torch.utils.data import Dataset
+from torchvision.transforms import v2
 from tqdm import tqdm
+from typing import Callable, List, Tuple
+
+
+def load_moving_mnist_image(
+    training_height: int, training_width: int, split: str = "train"
+) -> Tuple[Dataset, Callable[[torch.Tensor], List[str]]]:
+    assert split in ["train", "validation"]
+
+    if split == "train":
+        dataset = MovingMNISTImage(
+            ".",
+            train=True,
+            transform=v2.Compose(
+                [
+                    # To the memory requirements, resize the MNIST
+                    # images from (64,64) to (32, 32).
+                    v2.Resize(
+                        size=(training_height, training_width),
+                        antialias=True,
+                    ),
+                    # Convert the motion images to (0,1) float range
+                    v2.ToDtype(torch.float32, scale=True),
+                ]
+            ),
+        )
+
+    else:
+        dataset = MovingMNISTImage(
+            ".",
+            train=False,
+            transform=v2.Compose(
+                [
+                    # To the memory requirements, resize the MNIST
+                    # images from (64,64) to (32, 32).
+                    v2.Resize(
+                        size=(training_height, training_width),
+                        antialias=True,
+                    ),
+                    # Convert the motion images to (0,1) float range
+                    v2.ToDtype(torch.float32, scale=True),
+                ]
+            ),
+        )
+    return dataset, convert_labels_to_prompts
 
 
 class MovingMNIST(Dataset):
@@ -230,3 +275,33 @@ def download_file_from_google_drive(id, destination):
             }
             response = session.get(download_url, params=params, stream=True)
     save_response_content(response, destination)
+
+
+def convert_labels_to_prompts(labels: torch.Tensor) -> List[str]:
+    """Converts MNIST class labels to text prompts.
+
+    Supports both the strings "0" and "zero" to describe the
+    class labels.
+    """
+    # The conditioning we pass to the model will be a vectorized-form of
+    # MNIST classes. Since we have a fixed number of classes, we can create
+    # a hard-coded "embedding" of the MNIST class label.
+    text_labels = [
+        ("zero", "0"),
+        ("one", "1"),
+        ("two", "2"),
+        ("three", "3"),
+        ("four", "4"),
+        ("five", "5"),
+        ("six", "6"),
+        ("seven", "7"),
+        ("eight", "8"),
+        ("nine", "9"),
+    ]
+
+    # First convert the labels into a list of string prompts
+    prompts = [
+        f"{text_labels[labels[i][0]][torch.randint(0, len(text_labels[labels[i][0]]), size=())]} and {text_labels[labels[i][1]][torch.randint(0, len(text_labels[labels[i][1]]), size=())]}"
+        for i in range(labels.shape[0])
+    ]
+    return prompts

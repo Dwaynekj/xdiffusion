@@ -704,29 +704,31 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         s = self._config.diffusion.score_network.params.input_spatial_size
         input_spatial_size = [s[0], s[1]] if isinstance(s, list) else [s, s]
         fix_torchinfo_for_str()
-        summary(
-            self._score_network.to(device),
-            input_data=[
-                (
-                    torch.rand(
-                        batch_size,
-                        self._config.diffusion.score_network.params.input_channels,
-                        self._config.diffusion.score_network.params.input_number_of_frames,
-                        input_spatial_size[0],
-                        input_spatial_size[1],
-                        device=device,
-                    )
-                    if is_video
-                    else torch.rand(
-                        batch_size,
-                        self._config.diffusion.score_network.params.input_channels,
-                        input_spatial_size[0],
-                        input_spatial_size[1],
-                        device=device,
-                    )
-                ),
-                summary_context,
-            ],
+        print(
+            summary(
+                self._score_network.to(device),
+                input_data=[
+                    (
+                        torch.rand(
+                            batch_size,
+                            self._config.diffusion.score_network.params.input_channels,
+                            self._config.diffusion.score_network.params.input_number_of_frames,
+                            input_spatial_size[0],
+                            input_spatial_size[1],
+                            device=device,
+                        )
+                        if is_video
+                        else torch.rand(
+                            batch_size,
+                            self._config.diffusion.score_network.params.input_channels,
+                            input_spatial_size[0],
+                            input_spatial_size[1],
+                            device=device,
+                        )
+                    ),
+                    summary_context,
+                ],
+            )
         )
 
     def load_checkpoint(self, checkpoint_path: str, strict: bool = False):
