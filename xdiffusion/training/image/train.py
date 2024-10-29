@@ -327,11 +327,12 @@ def train(
                     validation_dataloader=validation_dataloader,
                 )
                 save(
-                    diffusion_model,
-                    step,
-                    loss,
-                    optimizers,
-                    config,
+                    diffusion_model=diffusion_model,
+                    step=step,
+                    loss=loss,
+                    optimizers=optimizers,
+                    config=config,
+                    output_path=output_path,
                     save_lora=use_lora_training,
                 )
                 average_loss = average_loss_cumulative / float(save_and_sample_every_n)
@@ -354,7 +355,15 @@ def train(
         sample_with_guidance=sample_with_guidance,
         validation_dataloader=validation_dataloader,
     )
-    save(diffusion_model, step, loss, optimizers, config, save_lora=use_lora_training)
+    save(
+        diffusion_model=diffusion_model,
+        step=step,
+        loss=loss,
+        optimizers=optimizers,
+        config=config,
+        output_path=output_path,
+        save_lora=use_lora_training,
+    )
 
 
 def sample(
