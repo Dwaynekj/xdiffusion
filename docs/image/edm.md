@@ -31,7 +31,7 @@ There are several different configurations you can experiment with:
 To train the basic EDM model, use:
 
 ```
-> python training/image/mnist/train.py --config_path configs/image/mnist/edm.yaml
+> python training/image/train.py --config_path configs/image/mnist/edm.yaml --dataset_name "image/mnist"
 ```
 
 We successfully tested training on a single T4 instance (16GB VRAM) using a batch size of 64.

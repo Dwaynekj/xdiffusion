@@ -30,7 +30,7 @@ There is no specific on configureation file for training a LoRA. Instead, we use
 To train a LoRA model, use with a pretrained checkpoint from any other model:
 
 ```
-> python training/image/mnist/train_lora.py --config_path configs/image/mnist/ddpm_32x32_v_continuous_clip.yaml ----load_model_weights_from_checkpoint output/image/mnist/ddpm_32x32_v_continuous_clip/diffusion-10000.pt
+> python training/image/train.py --config_path configs/image/mnist/ddpm_32x32_v_continuous_clip.yaml --dataset_name "image/mnist_inverted" --mixed_precision bf16 --use_lora_training --load_model_weights_from_checkpoint output/image/mnist/ddpm_32x32_v_continuous_clip/diffusion-10000.pt
 ```
 
 Note that the training script or LoRA's will be trying to learn an inverted style for MNIST. So where the original model will output white text on a black background, applying the LoRA weights to that same, frozen model will output blak text on a white background.

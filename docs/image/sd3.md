@@ -25,7 +25,7 @@ The configuration file is located in [SD3](https://github.com/swookey-thinky/xdi
 To train the SD3 model, use:
 
 ```
-> python training/videoimage/mnist/train.py --config_path configs/image/mnist/sd3.yaml
+> python training/image/train.py --config_path configs/image/mnist/sd3.yaml --dataset_name "image/mnist"
 ```
 
 We successfully tested training on a single T4 instance (16GB VRAM) using a batch size of 64.

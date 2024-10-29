@@ -23,10 +23,10 @@ The configuration file is located in [Imagen](https://github.com/swookey-thinky/
 
 ## Training
 
-To train the Imagen model, use:
+To train the DDPM model, use:
 
 ```
-> python training/videoimage/mnist/train.py --config_path configs/image/mnist/ddpm_32x32_epsilon_discrete.yaml
+> python training/image/train.py --config_path configs/image/mnist/ddpm_32x32_epsilon_discrete.yaml --dataset_name "image/mnist"
 ```
 
 We successfully tested training on a single T4 instance (16GB VRAM) using a batch size of 128.

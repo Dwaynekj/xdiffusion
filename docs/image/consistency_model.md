@@ -32,7 +32,7 @@ Follow the instructions from [Requirements For All Lessons](https://github.com/s
 To train the basic consistency model from scratch, use:
 
 ```
-> python training/image/mnist/train.py --config_path configs/image/mnist/consistency_model.yaml
+> python training/image/train.py --config_path configs/image/mnist/consistency_model.yaml --dataset_name "image/mnist"
 ```
 
 We successfully tested training on a single T4 instance (16GB VRAM) using a batch size of 64.

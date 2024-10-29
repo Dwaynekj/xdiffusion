@@ -28,7 +28,7 @@ PixArt-α is a three stage training process, and we implement the first two stag
 Run the training script at `train_mnist.py` like:
 
 ```
-> python training/image/mnist/train.py --config_path "configs/image/mnist/pixart_alpha_class_conditional.yaml" --num_training_steps 30000
+> python training/image/train.py --config_path "configs/image/mnist/pixart_alpha_class_conditional.yaml" --num_training_steps 30000 --dataset_name "image/mnist"
 ```
 
 Generated samples will be saved to `output/image/mnist/pixart_alpha_class_conditional`.

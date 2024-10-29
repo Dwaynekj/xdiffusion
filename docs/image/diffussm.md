@@ -26,7 +26,7 @@ The configuration file is located in [DiffuSSM](https://github.com/swookey-think
 To train the DiffuSSM model, use:
 
 ```
-> python training/image/mnist/train.py --config_path configs/image/mnist/diffussm.yaml
+> python training/image/train.py --config_path configs/image/mnist/diffussm.yaml --dataset_name "image/mnist"
 ```
 
 We successfully tested training on a single T4 instance (16GB VRAM) using a batch size of 8.

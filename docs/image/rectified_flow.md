@@ -26,7 +26,7 @@ The configuration file is located in [Rectified Flow](https://github.com/swookey
 To train the rectified flow model, use:
 
 ```
-> python training/image/mnist/train.py --config_path configs/image/mnist/rectified_flow_32x32.yaml
+> python training/image/train.py --config_path configs/image/mnist/rectified_flow_32x32.yaml --dataset_name "image/mnist"
 ```
 
 We successfully tested training on a single T4 instance (16GB VRAM) using a batch size of 128.

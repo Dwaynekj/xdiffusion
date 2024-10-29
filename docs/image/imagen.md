@@ -36,7 +36,7 @@ The configuration file is located in [Imagen](https://github.com/swookey-thinky/
 To train the Imagen model, use:
 
 ```
-> python training/videoimage/mnist/train.py --config_path configs/image/mnist/imagen.yaml
+> python training/image/train.py --config_path configs/image/mnist/imagen.yaml --dataset_name "image/mnist"
 ```
 
 We successfully tested training on a single T4 instance (16GB VRAM) using a batch size of 64.
