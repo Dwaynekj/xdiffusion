@@ -9,7 +9,7 @@ In this lesson we are going to learn how to apply the technique of LoRA's from t
 
 Low-Rank adaptation is a very cool technique to fine-tune an image diffusion model without training all of the weights of the model. Instead, we train only a very small number of weights, which are used to adapt the residuals of the model.
 
-There is a very good introduction to this technique in the [clonofsimo]() repository, which introduced the LoRA's for diffusion model. We will summarize it here:
+There is a very good introduction to this technique in the [cloneofsimo](https://github.com/cloneofsimo/lora) repository, which introduced the LoRA's for diffusion model. We will summarize it here:
 
 Well, what's the alternative? In the domain of LLM, researchers have developed Efficient fine-tuning methods. LoRA, especially, tackles the very problem the community currently has: end users with Open-sourced stable-diffusion model want to try various other fine-tuned model that is created by the community, but the model is too large to download and use. LoRA instead attempts to fine-tune the "residual" of the model instead of the entire model: i.e., train the `ΔW` instead of `W`.
 
@@ -23,7 +23,7 @@ In this repository, we will be working with the [MNIST](https://en.wikipedia.org
 
 ## Configuration File
 
-There is no specific on configureation file for training a LoRA. Instead, we use a separate training script, detailed below.
+There is no specific on configuration file for training a LoRA. Instead, we use a separate training script, detailed below.
 
 ## Training
 
@@ -51,8 +51,7 @@ Output will be saved to the `output/image/mnist/sample/ddpm_32x32_v_continuous_c
 
 | Config | Checkpoint | Original Model | Applied LoRA Weights
 | ------ | ---------- | ------- | -------
-| [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/ddpm_32x32_v_continuous_clip.yaml) | [google drive](https://drive.google.com/file/d/1atzhtv-kRegnabROGZs6olxuVONiRQKI/view?usp=sharing) | ![DDPM](https://drive.google.com/uc?export=view&id=1_r8poe1SJxf8UtT4mmQaTT378m26hD-F) | ![LoRA](https://drive.google.com/uc?export=view&id=1_r8poe1SJxf8UtT4mmQaTT378m26hD-F)
-
+| [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/ddpm_32x32_v_continuous_clip.yaml) | [google drive](https://drive.google.com/file/d/1atzhtv-kRegnabROGZs6olxuVONiRQKI/view?usp=sharing) | ![LoRA Original](https://drive.google.com/uc?export=view&id=1_r8poe1SJxf8UtT4mmQaTT378m26hD-F) | ![LoRA](https://drive.google.com/uc?export=view&id=1NGtmYiLNAtOTC46UK7nbpkGf3NYfSVWI)
 
 
 ## Other Resources
