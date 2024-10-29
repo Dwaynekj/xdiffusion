@@ -19,44 +19,48 @@ from typing import Callable, List, Tuple
 
 
 def load_moving_mnist_image(
-    training_height: int, training_width: int, split: str = "train"
+    training_height: int,
+    training_width: int,
+    split: str = "train",
+    invert: bool = False,
 ) -> Tuple[Dataset, Callable[[torch.Tensor], List[str]]]:
     assert split in ["train", "validation"]
 
+    if invert:
+        xforms = [
+            # To the memory requirements, resize the MNIST
+            # images from (64,64) to (32, 32).
+            v2.Resize(
+                size=(training_height, training_width),
+                antialias=True,
+            ),
+            # Convert the motion images to (0,1) float range
+            v2.ToDtype(torch.float32, scale=True),
+            # Invert the dataset for LoRA training
+            v2.Lambda(_invert),
+        ]
+    else:
+        xforms = [  # To the memory requirements, resize the MNIST
+            # images from (64,64) to (32, 32).
+            v2.Resize(
+                size=(training_height, training_width),
+                antialias=True,
+            ),
+            # Convert the motion images to (0,1) float range
+            v2.ToDtype(torch.float32, scale=True),
+        ]
     if split == "train":
         dataset = MovingMNISTImage(
             ".",
             train=True,
-            transform=v2.Compose(
-                [
-                    # To the memory requirements, resize the MNIST
-                    # images from (64,64) to (32, 32).
-                    v2.Resize(
-                        size=(training_height, training_width),
-                        antialias=True,
-                    ),
-                    # Convert the motion images to (0,1) float range
-                    v2.ToDtype(torch.float32, scale=True),
-                ]
-            ),
+            transform=v2.Compose(xforms),
         )
 
     else:
         dataset = MovingMNISTImage(
             ".",
             train=False,
-            transform=v2.Compose(
-                [
-                    # To the memory requirements, resize the MNIST
-                    # images from (64,64) to (32, 32).
-                    v2.Resize(
-                        size=(training_height, training_width),
-                        antialias=True,
-                    ),
-                    # Convert the motion images to (0,1) float range
-                    v2.ToDtype(torch.float32, scale=True),
-                ]
-            ),
+            transform=v2.Compose(xforms),
         )
     return dataset, convert_labels_to_prompts
 
@@ -305,3 +309,7 @@ def convert_labels_to_prompts(labels: torch.Tensor) -> List[str]:
         for i in range(labels.shape[0])
     ]
     return prompts
+
+
+def _invert(x: torch.Tensor) -> torch.Tensor:
+    return v2.functional.invert(x)
