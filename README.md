@@ -49,6 +49,7 @@ The following is a list of the supported image models, their current results, an
 | July 2024 | AuraFlow | [Introducing AuraFlow v0.1, an Open Exploration of Large Rectified Flow Models](https://blog.fal.ai/auraflow/) | [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/auraflow.yaml) | ![AuraFlow](https://drive.google.com/uc?export=view&id=1_qODQDHpEZrverYHqa6_uH0QnLy7Tf4f) | [instructions](https://github.com/swookey-thinky/xdiffusion/blob/main/docs/image/auraflow.md)
 | August 2024 | Flux | [Flux Announcement](https://blackforestlabs.ai/announcing-black-forest-labs/) | [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/flux.yaml) | ![Flux](https://drive.google.com/uc?export=view&id=1_r8poe1SJxf8UtT4mmQaTT378m26hD-F) | [instructions](https://github.com/swookey-thinky/xdiffusion/blob/main/docs/image/flux.md)
 | October 2024 | Sana | [SANA: Efficient High-Resolution Image Synthesis with Linear Diffusion Transformers](https://arxiv.org/abs/2410.10629) | | |
+| October 2024 | Stable Diffusion 3.5 | [Introducing Stable Diffusion 3.5](https://stability.ai/news/introducing-stable-diffusion-3-5) | | |
 
 ## Video Diffusion
 
