@@ -50,6 +50,7 @@ The following is a list of the supported image models, their current results, an
 | August 2024 | Flux | [Flux Announcement](https://blackforestlabs.ai/announcing-black-forest-labs/) | [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/flux.yaml) | ![Flux](https://drive.google.com/uc?export=view&id=1_r8poe1SJxf8UtT4mmQaTT378m26hD-F) | [instructions](https://github.com/swookey-thinky/xdiffusion/blob/main/docs/image/flux.md)
 | October 2024 | Sana | [SANA: Efficient High-Resolution Image Synthesis with Linear Diffusion Transformers](https://arxiv.org/abs/2410.10629) | | |
 | October 2024 | Stable Diffusion 3.5 | [Introducing Stable Diffusion 3.5](https://stability.ai/news/introducing-stable-diffusion-3-5) | | |
+| November 2024 | | [Training-free Regional Prompting for Diffusion Transformers](https://arxiv.org/abs/2411.02395) | | |
 
 ## Video Diffusion
 
