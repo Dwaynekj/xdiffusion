@@ -15,7 +15,7 @@ def main(override=None):
     parser.add_argument("--save_and_sample_every_n", type=int, default=1000)
     parser.add_argument("--load_model_weights_from_checkpoint", type=str, default="")
     parser.add_argument("--resume_from", type=str, default="")
-    parser.add_argument("--dataset_name", type=str, default="")
+    parser.add_argument("--dataset_name", type=str, required=True)
     parser.add_argument("--mixed_precision", type=str, default="")
     parser.add_argument("--use_lora_training", action="store_true")
 
@@ -29,7 +29,7 @@ def main(override=None):
         save_and_sample_every_n=args.save_and_sample_every_n,
         load_model_weights_from_checkpoint=args.load_model_weights_from_checkpoint,
         resume_from=args.resume_from,
-        output_path="output/image/mnist",
+        output_path="output",
         dataset_name=args.dataset_name,
         mixed_precision=args.mixed_precision,
         use_lora_training=args.use_lora_training,

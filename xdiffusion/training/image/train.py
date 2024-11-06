@@ -11,7 +11,7 @@ from torchinfo import summary
 from torchvision import transforms, utils
 from torchvision.datasets import MNIST
 from tqdm import tqdm
-from typing import Callable, List
+from typing import Callable, List, Optional
 
 from xdiffusion.datasets.utils import load_dataset
 from xdiffusion.diffusion.ddpm import GaussianDiffusion_DDPM
@@ -36,6 +36,7 @@ def train(
     resume_from: str = "",
     mixed_precision: str = "",
     use_lora_training: bool = False,
+    compile: Optional[bool] = None,
 ):
     """Trains an image diffusion model from a config file.
 
@@ -47,9 +48,9 @@ def train(
         output_path: Full path to store output artifacts.
     """
     if use_lora_training:
-        OUTPUT_NAME = f"{output_path}/{str(Path(config_path).stem)}/lora"
+        OUTPUT_NAME = f"{output_path}/{dataset_name}/{str(Path(config_path).stem)}/lora"
     else:
-        OUTPUT_NAME = f"{output_path}/{str(Path(config_path).stem)}"
+        OUTPUT_NAME = f"{output_path}/{dataset_name}/{str(Path(config_path).stem)}"
 
     # Ensure the output directories exist
     os.makedirs(OUTPUT_NAME, exist_ok=True)
@@ -57,29 +58,35 @@ def train(
     # Open the model configuration
     config = load_yaml(config_path)
 
-    if "training" in config and "dataset" in config.training:
-        dataset, convert_labels_to_prompts = load_dataset(
-            dataset_name=config.training.dataset, config=config.data, split="train"
-        )
-        validation_dataset, _ = load_dataset(
-            dataset_name=config.training.dataset, config=config.data, split="validation"
-        )
+    # Check to see if we are using gradient accumulation
+    gradient_accumulation_steps = 1
+    if "training" in config and "gradient_accumulation_steps" in config.training:
+        gradient_accumulation_steps = config.training.gradient_accumulation_steps
 
+    if "training" in config and not mixed_precision:
+        mixed_precision = config.training.mixed_precision
     else:
-        dataset, convert_labels_to_prompts = load_dataset(
-            dataset_name=dataset_name, config=config.data, split="train"
-        )
-        validation_dataset, _ = load_dataset(
-            dataset_name=dataset_name, config=config.data, split="validation"
-        )
+        if not mixed_precision:
+            mixed_precision = "no"
 
-    # Create the dataloader for the MNIST dataset
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
-
-    num_samples = 64
-    validation_dataloader = DataLoader(
-        dataset, batch_size=num_samples, shuffle=True, num_workers=4
+    # The accelerate library will handle of the GPU device management for us.
+    # Make sure to create it early so that we can gate some data loading on it.
+    accelerator = Accelerator(
+        dataloader_config=DataLoaderConfiguration(split_batches=False),
+        mixed_precision=mixed_precision,
+        gradient_accumulation_plugin=(
+            GradientAccumulationPlugin(
+                num_steps=gradient_accumulation_steps,
+                adjust_scheduler=True,
+                sync_with_dataloader=False,
+            )
+            if gradient_accumulation_steps > 1
+            else None
+        ),
+        step_scheduler_with_optimizer=False,
     )
+    accelerator.print(f"Training with {gradient_accumulation_steps} gradient accumulation steps.")
+    accelerator.print(f"Training with mixed precision: {mixed_precision}.")
 
     # Create the diffusion model we are going to train, with a UNet
     # specifically for the MNIST dataset.
@@ -106,31 +113,34 @@ def train(
     # Build context to display the model summary.
     diffusion_model.print_model_summary()
 
-    if "training" in config and not mixed_precision:
-        mixed_precision = config.training.mixed_precision
-    else:
-        if not mixed_precision:
-            mixed_precision = "no"
-    print(f"Training with mixed precision: {mixed_precision}.")
+    # Move the model to the accelerator
+    diffusion_model = accelerator.prepare(diffusion_model)
 
-    # Check to see if we are using gradient accumulation
-    gradient_accumulation_steps = 1
-    if "training" in config and "gradient_accumulation_steps" in config.training:
-        gradient_accumulation_steps = config.training.gradient_accumulation_steps
-
-    # The accelerate library will handle of the GPU device management for us.
-    accelerator = Accelerator(
-        dataloader_config=DataLoaderConfiguration(split_batches=False),
-        mixed_precision=mixed_precision,
-        gradient_accumulation_plugin=(
-            GradientAccumulationPlugin(
-                num_steps=gradient_accumulation_steps,
-                adjust_scheduler=True,
-                sync_with_dataloader=False,
+    # Now load the dataset. Do it on the main process first in case we have to download
+    # it.
+    with accelerator.main_process_first():
+        if "training" in config and "dataset" in config.training:
+            dataset, convert_labels_to_prompts = load_dataset(
+                dataset_name=config.training.dataset, config=config.data, split="train"
             )
-            if gradient_accumulation_steps > 1
-            else None
-        ),
+            validation_dataset, _ = load_dataset(
+                dataset_name=config.training.dataset, config=config.data, split="validation"
+            )
+
+        else:
+            dataset, convert_labels_to_prompts = load_dataset(
+                dataset_name=dataset_name, config=config.data, split="train"
+            )
+            validation_dataset, _ = load_dataset(
+                dataset_name=dataset_name, config=config.data, split="validation"
+            )
+
+    # Create the dataloader for the MNIST dataset
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+
+    num_samples = 64
+    validation_dataloader = DataLoader(
+        dataset, batch_size=num_samples, shuffle=True, num_workers=4
     )
 
     # Now create the optimizer. The optimizer choice and parameters come from
@@ -139,7 +149,7 @@ def train(
     #  former. We left the hyperparameters to their standard values. We set the learning
     #  rate to 2 × 10−4 without any sweeping, and we lowered it to 2 × 10−5
     #  for the 256 × 256 images, which seemed unstable to train with the larger learning rate."
-    optimizers = diffusion_model.configure_optimizers(learning_rate=2e-4)
+    optimizers = accelerator.unwrap_model(diffusion_model).configure_optimizers(learning_rate=2e-4)
 
     # Load the optimizers if we have them from the checkpoint
     if resume_from:
@@ -149,7 +159,7 @@ def train(
             optimizers[i].load_state_dict(checkpoint["optimizer_state_dicts"][i])
 
     # Configure the learning rate schedule
-    learning_rate_schedules = diffusion_model.configure_learning_rate_schedule(
+    learning_rate_schedules = accelerator.unwrap_model(diffusion_model).configure_learning_rate_schedule(
         optimizers
     )
 
@@ -157,15 +167,13 @@ def train(
     all_device_objects = accelerator.prepare(
         dataloader,
         validation_dataloader,
-        diffusion_model,
         *optimizers,
         *learning_rate_schedules,
     )
     dataloader = all_device_objects[0]
     validation_dataloader = all_device_objects[1]
-    diffusion_model = all_device_objects[2]
-    optimizers = all_device_objects[3 : 3 + len(optimizers)]
-    learning_rate_schedules = all_device_objects[3 + len(optimizers) :]
+    optimizers = all_device_objects[2 : 2 + len(optimizers)]
+    learning_rate_schedules = all_device_objects[2 + len(optimizers) :]
     assert len(optimizers) == len(
         learning_rate_schedules
     ), "Optimizers and learning rate schedules are not the same length!"
@@ -203,6 +211,16 @@ def train(
     average_loss = 0.0
     average_loss_cumulative = 0.0
 
+    do_compile = False
+    if compile is not None:
+        do_compile = compile
+    else:
+        if "training" in config and "compile" in config.training:
+            do_compile = config.training.compile
+    accelerator.print(f"Model compilation setting: {do_compile}")
+    if do_compile:
+        diffusion_model = torch.compile(diffusion_model)
+
     with tqdm(initial=step, total=num_training_steps) as progress_bar:
         # Perform gradient descent for the given number of training steps.
         while step < num_training_steps:
@@ -221,7 +239,7 @@ def train(
                     # Train each cascade in the model using the given data.
                     stage_loss = 0
                     for model_for_layer, optimizer_for_layer, schedule_for_layer in zip(
-                        diffusion_model.models(), optimizers, learning_rate_schedules
+                        accelerator.unwrap_model(diffusion_model).models(), optimizers, learning_rate_schedules
                     ):
                         # Is this a super resolution model? If it is, then generate
                         # the low resolution imagery as conditioning.
@@ -325,16 +343,18 @@ def train(
                     convert_labels_to_prompts=convert_labels_to_prompts,
                     sample_with_guidance=sample_with_guidance,
                     validation_dataloader=validation_dataloader,
+                    accelerator=accelerator,
                 )
-                save(
-                    diffusion_model=diffusion_model,
-                    step=step,
-                    loss=loss,
-                    optimizers=optimizers,
-                    config=config,
-                    output_path=OUTPUT_NAME,
-                    save_lora=use_lora_training,
-                )
+                if accelerator.is_main_process:
+                    save(
+                        diffusion_model=accelerator.unwrap_model(diffusion_model),
+                        step=step,
+                        loss=loss,
+                        optimizers=optimizers,
+                        config=config,
+                        output_path=OUTPUT_NAME,
+                        save_lora=use_lora_training,
+                    )
                 average_loss = average_loss_cumulative / float(save_and_sample_every_n)
                 average_loss_cumulative = 0.0
 
@@ -354,16 +374,18 @@ def train(
         convert_labels_to_prompts=convert_labels_to_prompts,
         sample_with_guidance=sample_with_guidance,
         validation_dataloader=validation_dataloader,
+        accelerator=accelerator,
     )
-    save(
-        diffusion_model=diffusion_model,
-        step=step,
-        loss=loss,
-        optimizers=optimizers,
-        config=config,
-        output_path=OUTPUT_NAME,
-        save_lora=use_lora_training,
-    )
+    if accelerator.is_main_process:
+        save(
+            diffusion_model=accelerator.unwrap_model(diffusion_model),
+            step=step,
+            loss=loss,
+            optimizers=optimizers,
+            config=config,
+            output_path=OUTPUT_NAME,
+            save_lora=use_lora_training,
+        )
 
 
 def sample(
@@ -373,6 +395,7 @@ def sample(
     validation_dataloader: DataLoader,
     output_path: str,
     convert_labels_to_prompts: Callable[[torch.Tensor], List[str]],
+    accelerator: Accelerator,
     num_samples=64,
     sample_with_guidance: bool = False,
 ):
@@ -434,40 +457,42 @@ def sample(
                     )
 
     else:
-        samples, intermediate_stage_output = diffusion_model.sample(
+        samples, intermediate_stage_output = accelerator.unwrap_model(diffusion_model).sample(
             num_samples=num_samples, context=context
         )
 
         # Save the samples into an image grid
-        utils.save_image(
-            samples,
-            str(f"{output_path}/sample-{step}.png"),
-            nrow=int(math.sqrt(num_samples)),
-        )
+        if accelerator.is_main_process:
+            utils.save_image(
+                samples,
+                str(f"{output_path}/sample-{step}.png"),
+                nrow=int(math.sqrt(num_samples)),
+            )
 
-        # Save the intermedidate stages if they exist
-        if intermediate_stage_output is not None:
-            for layer_idx, intermediate_output in enumerate(intermediate_stage_output):
-                utils.save_image(
-                    intermediate_output,
-                    str(f"{output_path}/sample-{step}-stage-{layer_idx}.png"),
-                    nrow=int(math.sqrt(num_samples)),
-                )
+            # Save the intermedidate stages if they exist
+            if intermediate_stage_output is not None:
+                for layer_idx, intermediate_output in enumerate(intermediate_stage_output):
+                    utils.save_image(
+                        intermediate_output,
+                        str(f"{output_path}/sample-{step}-stage-{layer_idx}.png"),
+                        nrow=int(math.sqrt(num_samples)),
+                    )
 
-    # Save the prompts that were used
-    with open(f"{output_path}/sample-{step}.txt", "w") as fp:
-        for i in range(num_samples):
-            if i != 0 and (i % math.sqrt(num_samples)) == 0:
-                fp.write("\n")
-            fp.write(f"{context['text_prompts'][i]} ")
+    if accelerator.is_main_process:
+        # Save the prompts that were used
+        with open(f"{output_path}/sample-{step}.txt", "w") as fp:
+            for i in range(num_samples):
+                if i != 0 and (i % math.sqrt(num_samples)) == 0:
+                    fp.write("\n")
+                fp.write(f"{context['text_prompts'][i]} ")
 
-    # Save the low-resolution imagery if it was used.
-    if "super_resolution" in config:
-        utils.save_image(
-            context[config.super_resolution.conditioning_key],
-            str(f"{output_path}/low_resolution_context-{step}.png"),
-            nrow=int(math.sqrt(num_samples)),
-        )
+        # Save the low-resolution imagery if it was used.
+        if "super_resolution" in config:
+            utils.save_image(
+                context[config.super_resolution.conditioning_key],
+                str(f"{output_path}/low_resolution_context-{step}.png"),
+                nrow=int(math.sqrt(num_samples)),
+            )
 
 
 def save(

@@ -146,7 +146,7 @@ class GaussianDiffusion_SDE(DiffusionModel):
 
     def load_checkpoint(self, checkpoint_path: str, strict: bool = False):
         # Load the state dict for the score network
-        checkpoint = torch.load(checkpoint_path, map_location="cpu")
+        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
         if hasattr(self._score_network, "load_model_weights"):
             state_dict = checkpoint["model_state_dict"]
 
