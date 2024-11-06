@@ -15,6 +15,7 @@ def load_dataset(
         "image/mnist_inverted",
         "image/moving_mnist",
         "image/moving_mnist_inverted",
+        "image/cifar10",
         "video/moving_mnist",
     ]
 
@@ -51,6 +52,14 @@ def load_dataset(
             training_width=config.image_size,
             split=split,
             invert=True,
+        )
+    elif dataset_name == "image/cifar10":
+        from xdiffusion.datasets.cifar10 import load_cifar10
+
+        return load_cifar10(
+            training_height=config.image_size,
+            training_width=config.image_size,
+            split=split,
         )
 
     raise NotImplementedError(f"Dataset '{dataset_name}' not implemented yet.")
