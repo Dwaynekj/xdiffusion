@@ -386,6 +386,7 @@ def train(
             output_path=OUTPUT_NAME,
             save_lora=use_lora_training,
         )
+    accelerator.end_training()
 
 
 def sample(
