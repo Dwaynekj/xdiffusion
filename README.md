@@ -1,6 +1,8 @@
 # xdiffusion
 A unified media (Image, Video, Audio, Text) diffusion repository, for education and learning.
 
+If you are looking for just the lessons on image diffusion models, checkout [mindiffusion](https://github.com/swookey-thinky/mindiffusion) for more image diffusion model paper implementations.
+
 ## Requirements
 
 This package built using PyTorch and written in Python 3. To setup an environment to run all of the lessons, we suggest using conda or venv:
