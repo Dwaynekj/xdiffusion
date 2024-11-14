@@ -52,7 +52,7 @@ The following is a list of the supported image models, their current results, an
 | October 2024 | Sana | [SANA: Efficient High-Resolution Image Synthesis with Linear Diffusion Transformers](https://arxiv.org/abs/2410.10629) | | |
 | October 2024 | Stable Diffusion 3.5 | [Introducing Stable Diffusion 3.5](https://stability.ai/news/introducing-stable-diffusion-3-5) | | |
 | November 2024 | | [Training-free Regional Prompting for Diffusion Transformers](https://arxiv.org/abs/2411.02395) | | |
-
+| November 2024 | JanusFlow | [JanusFlow: Harmonizing Autoregression and Rectified Flow for Unified Multimodal Understanding and Generation](https://arxiv.org/abs/2411.07975) | | |
 ## Video Diffusion
 
 ### Training Datasets
