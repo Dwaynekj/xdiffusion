@@ -112,6 +112,7 @@ The following is a list of the supported video models, their current results, an
 | May 2024 | T2V-Turbo | [T2V-Turbo: Breaking the Quality Bottleneck of Video Consistency Model with Mixed Reward Feedback](https://arxiv.org/abs/2405.18750) | | |
 | July 2024 | Diffusion Forcing | [Diffusion Forcing: Next-token Prediction Meets Full-Sequence Diffusion](https://arxiv.org/abs/2407.01392) | | |
 | August 2024 | GameNGen | [Diffusion Models Are Real-Time Game Engines](https://arxiv.org/abs/2408.14837) | | |
+| August 2024 | CogVideoX | [CogVideoX: Text-to-Video Diffusion Models with An Expert Transformer](https://arxiv.org/abs/2408.06072) | | |
 | October 2024 | Movie-Gen | [Movie Gen: A Cast of Media Foundation Models](https://ai.meta.com/static-resource/movie-gen-research-paper) | | |
 | October 2024 | Pyramid Flow | [Pyramidal Flow Matching for Efficient Video Generative Modeling](https://arxiv.org/abs/2410.05954) | | |
 | October 2024 | T2V-Turbo-v2 | [T2V-Turbo-v2: Enhancing Video Generation Model Post-Training through Data, Reward, and Conditional Guidance Design](https://arxiv.org/abs/2410.05677) | | |
