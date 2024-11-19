@@ -10,7 +10,7 @@ from xdiffusion.layers.flux import (
     EmbedND,
     LastLayer,
     MLPEmbedder,
-    SingleStreamBlock,
+    DoubleStreamBlock,
     timestep_embedding,
 )
 
@@ -25,8 +25,8 @@ class WideFormerSingleBlock(torch.nn.Module):
         out_channels: int,
     ):
         super().__init__()
-        self._transformer_block = SingleStreamBlock(
-            hidden_size, num_heads, mlp_ratio=mlp_ratio
+        self._transformer_block = DoubleStreamBlock(
+            hidden_size, num_heads, mlp_ratio=mlp_ratio, qkv_bias=True
         )
 
         if in_channels != out_channels:
@@ -40,10 +40,15 @@ class WideFormerSingleBlock(torch.nn.Module):
             self._token_mixer = torch.nn.Identity()
 
     def forward(
-        self, x: Tensor, vec: Tensor, pe: Tensor, attn_mask: Optional[Tensor] = None
+        self,
+        img: Tensor,
+        txt: Tensor,
+        vec: Tensor,
+        pe: Tensor,
+        attn_mask: Optional[Tensor] = None,
     ) -> Tensor:
-        h = self._token_mixer(x)
-        h = self._transformer_block(h, vec, pe, attn_mask)
+        h = self._token_mixer(img)
+        h = self._transformer_block(img=h, txt=txt, vec=vec, pe=pe)
         return h
 
 
@@ -99,11 +104,11 @@ class WideFormer(nn.Module):
                             self.num_heads,
                             mlp_ratio=config.mlp_ratio,
                             in_channels=(
-                                sequence_length
+                                image_sequence_length
                                 if layer_idx == 0
-                                else sequence_length * config.transformer_width
+                                else image_sequence_length * config.transformer_width
                             ),
-                            out_channels=sequence_length,
+                            out_channels=image_sequence_length,
                         )
                         for _ in range(config.transformer_width)
                     ]
@@ -115,8 +120,8 @@ class WideFormer(nn.Module):
             self.hidden_size,
             self.num_heads,
             mlp_ratio=config.mlp_ratio,
-            in_channels=sequence_length * config.transformer_width,
-            out_channels=sequence_length,
+            in_channels=image_sequence_length * config.transformer_width,
+            out_channels=image_sequence_length,
         )
 
         self.final_layer = LastLayer(self.hidden_size, 1, self.out_channels)
@@ -164,15 +169,13 @@ class WideFormer(nn.Module):
         ids = torch.cat((txt_ids, img_ids), dim=1)
         pe = self.pe_embedder(ids)
 
-        # Concatenate the text and image tokens
-        img = torch.cat((txt, img), 1)
-        B, L, D = img.shape
-
         # Apply the first layer
+        B, L, D = img.shape
         layer_output = []
 
         for block in self.transformer_channels[0]:
-            layer_output.append(block(img, vec=vec, pe=pe))
+            img_tokens, _ = block(img=img, txt=txt, vec=vec, pe=pe)
+            layer_output.append(img_tokens)
 
         # Now concatenate the layer output and apply each following block
         for layer in self.transformer_channels[1:]:
@@ -181,17 +184,16 @@ class WideFormer(nn.Module):
             layer_output = []
 
             # The layer input needs to be concatenated together
-
             layer_input = torch.cat(layer_input, dim=2).view(B, L * len(layer_input), D)
             for block in layer:
-                layer_output.append(block(layer_input, vec=vec, pe=pe))
+                img_tokens, _ = block(img=layer_input, txt=txt, vec=vec, pe=pe)
+                layer_output.append(img_tokens)
 
         # Apply the final transformer layer
         layer_input = torch.cat(layer_output, dim=2).view(B, L * len(layer_output), D)
-        img = self.transformer_final(layer_input, vec=vec, pe=pe)
+        img, _ = self.transformer_final(img=layer_input, txt=txt, vec=vec, pe=pe)
 
         # Parse out the image tokens
-        img = img[:, txt.shape[1] :, ...]
         img = self.final_layer(img, vec)  # (N, T, patch_size ** 2 * out_channels)
 
         # Unpatchify the output

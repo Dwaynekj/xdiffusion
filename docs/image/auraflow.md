@@ -44,8 +44,6 @@ Output will be saved to the `output/image/mnist/sample/auraflow` directory.
 | [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/auraflow.yaml) | [google drive](https://drive.google.com/file/d/1p7LXrEVD3tTH5RE4Dj3hNxx44Cr4ob8I/view?usp=sharing) | ![AuraFlow](https://drive.google.com/uc?export=view&id=1_qODQDHpEZrverYHqa6_uH0QnLy7Tf4f)
 
 
-https://drive.google.com/file/d/1_qODQDHpEZrverYHqa6_uH0QnLy7Tf4f/view?usp=sharing
-
 After training the network for 10k steps, the auraflow model is able to generate samples like the below:
 
 ![AuraFlow](https://drive.google.com/uc?export=view&id=1_qODQDHpEZrverYHqa6_uH0QnLy7Tf4f)
