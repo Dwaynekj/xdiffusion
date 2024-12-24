@@ -64,7 +64,7 @@ def create_mnist_embedded(width: int = 32, height: int = 32):
     ).get_decoder()
     text_encoder = text_encoder.eval().requires_grad_(False)
 
-    num_entries_per_shard = 10
+    num_entries_per_shard = 5000
     shard_idx = 0
     shard_file_path = "MNISTEmbeddedGemma2/mnist_embedded_gemma_2_{name}_{idx:03d}.npy"
     os.makedirs("MNISTEmbeddedGemma2", exist_ok=True)
