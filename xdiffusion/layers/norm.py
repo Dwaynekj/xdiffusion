@@ -1,6 +1,8 @@
 import numbers
 import torch
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
+
+from xdiffusion.layers.embedding import PixArtAlphaCombinedTimestepSizeEmbeddings
 
 
 class AdaLayerNormZero(torch.nn.Module):
@@ -45,6 +47,50 @@ class AdaLayerNormZero(torch.nn.Module):
         )
         x = self.norm(x) * (1 + scale_msa[:, None]) + shift_msa[:, None]
         return x, gate_msa, shift_mlp, scale_mlp, gate_mlp
+
+
+class AdaLayerNormSingle(torch.nn.Module):
+    r"""
+    Norm layer adaptive layer norm single (adaLN-single).
+
+    As proposed in PixArt-Alpha (see: https://arxiv.org/abs/2310.00426; Section 2.3).
+
+    Parameters:
+        embedding_dim (`int`): The size of each embedding vector.
+        use_additional_conditions (`bool`): To use additional conditions for normalization or not.
+    """
+
+    def __init__(self, embedding_dim: int, use_additional_conditions: bool = False):
+        super().__init__()
+
+        self.emb = PixArtAlphaCombinedTimestepSizeEmbeddings(
+            embedding_dim,
+            size_emb_dim=embedding_dim // 3,
+            use_additional_conditions=use_additional_conditions,
+        )
+
+        self.silu = torch.nn.SiLU()
+        self.linear = torch.nn.Linear(embedding_dim, 6 * embedding_dim, bias=True)
+
+    def forward(
+        self,
+        timestep: torch.Tensor,
+        added_cond_kwargs: Optional[Dict[str, torch.Tensor]] = None,
+        batch_size: Optional[int] = None,
+        hidden_dtype: Optional[torch.dtype] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        # No modulation happening here.
+        added_cond_kwargs = added_cond_kwargs or {
+            "resolution": None,
+            "aspect_ratio": None,
+        }
+        embedded_timestep = self.emb(
+            timestep,
+            **added_cond_kwargs,
+            batch_size=batch_size,
+            hidden_dtype=hidden_dtype,
+        )
+        return self.linear(self.silu(embedded_timestep)), embedded_timestep
 
 
 class FP32LayerNorm(torch.nn.LayerNorm):

@@ -1,9 +1,16 @@
-from abc import abstractmethod
 from einops.layers.torch import Rearrange
 import math
 import numpy as np
+import time
 import torch
-from transformers import CLIPTextModel, CLIPTokenizer, T5EncoderModel, T5Tokenizer
+from transformers import (
+    CLIPTextModel,
+    CLIPTokenizer,
+    T5EncoderModel,
+    T5Tokenizer,
+    AutoTokenizer,
+    AutoModelForCausalLM,
+)
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
 from xdiffusion.utils import freeze, prob_mask_like
@@ -265,10 +272,14 @@ class CLIPTextTokenProjection(torch.nn.Module):
         self._embedder = FrozenCLIPTextEmbedder(max_length=text_sequence_length)
 
     def forward(self, tokens, **kwargs):
+        start_time = time.perf_counter()
         # Tokens come in as a dictionary from the CLIP text encoder
         assert "input_ids" in tokens and "attention_mask" in tokens
         with torch.no_grad():
             text_embeddings, last_hidden_state = self._embedder.embed(tokens=tokens)
+        end_time = time.perf_counter()
+        latency = end_time - start_time
+
         return last_hidden_state.detach()
 
 
@@ -687,10 +698,69 @@ class PixArtAlphaTextProjection(torch.nn.Module):
         )
 
     def forward(self, caption):
-        hidden_states = self.linear_1(caption)
+        hidden_states = self.linear_1(caption.to(self.linear_1.weight.dtype))
         hidden_states = self.act_1(hidden_states)
         hidden_states = self.linear_2(hidden_states)
         return hidden_states
+
+
+class PixArtAlphaCombinedTimestepSizeEmbeddings(torch.nn.Module):
+    """
+    For PixArt-Alpha.
+
+    Reference:
+    https://github.com/PixArt-alpha/PixArt-alpha/blob/0f55e922376d8b797edd44d25d0e7464b260dcab/diffusion/model/nets/PixArtMS.py#L164C9-L168C29
+    """
+
+    def __init__(
+        self, embedding_dim, size_emb_dim, use_additional_conditions: bool = False
+    ):
+        super().__init__()
+
+        self.outdim = size_emb_dim
+        self.time_proj = Timesteps(num_channels=256, flip_sin_to_cos=True)
+        self.timestep_embedder = TimestepEmbedding(
+            in_channels=256, time_embed_dim=embedding_dim
+        )
+
+        self.use_additional_conditions = use_additional_conditions
+        if use_additional_conditions:
+            self.additional_condition_proj = Timesteps(
+                num_channels=256, flip_sin_to_cos=True, downscale_freq_shift=0
+            )
+            self.resolution_embedder = TimestepEmbedding(
+                in_channels=256, time_embed_dim=size_emb_dim
+            )
+            self.aspect_ratio_embedder = TimestepEmbedding(
+                in_channels=256, time_embed_dim=size_emb_dim
+            )
+
+    def forward(self, timestep, resolution, aspect_ratio, batch_size, hidden_dtype):
+        timesteps_proj = self.time_proj(timestep)
+        timesteps_emb = self.timestep_embedder(
+            timesteps_proj.to(dtype=hidden_dtype)
+        )  # (N, D)
+
+        if self.use_additional_conditions:
+            resolution_emb = self.additional_condition_proj(resolution.flatten()).to(
+                hidden_dtype
+            )
+            resolution_emb = self.resolution_embedder(resolution_emb).reshape(
+                batch_size, -1
+            )
+            aspect_ratio_emb = self.additional_condition_proj(
+                aspect_ratio.flatten()
+            ).to(hidden_dtype)
+            aspect_ratio_emb = self.aspect_ratio_embedder(aspect_ratio_emb).reshape(
+                batch_size, -1
+            )
+            conditioning = timesteps_emb + torch.cat(
+                [resolution_emb, aspect_ratio_emb], dim=1
+            )
+        else:
+            conditioning = timesteps_emb
+
+        return conditioning
 
 
 class CombinedTimestepTextProjEmbeddings(torch.nn.Module):
@@ -714,3 +784,83 @@ class CombinedTimestepTextProjEmbeddings(torch.nn.Module):
         pooled_projections = self.text_embedder(pooled_projection)
         conditioning = timesteps_emb + pooled_projections
         return conditioning
+
+
+class SanaPromptToTextEmbedding(torch.nn.Module):
+    def __init__(
+        self,
+        text_encoder_model_name: str = "google/gemma-2-2b-it",
+        max_length: int = 300,
+        input_key: str = "text_prompts",
+        output_key: str = "text_embeddings",
+        use_bfloat16: bool = True,
+        enable_cpu_offload: bool = False,
+        device_map: str = "cpu",
+        **hf_kwargs,
+    ):
+        super().__init__()
+
+        self.enable_cpu_offload = enable_cpu_offload
+        self.input_key = input_key
+        self.output_key = output_key
+        self.max_length = max_length
+        self.tokenizer = AutoTokenizer.from_pretrained(text_encoder_model_name)
+        self.tokenizer.padding_side = "right"
+
+        dtype = torch.bfloat16 if use_bfloat16 else torch.float32
+        self.text_encoder = AutoModelForCausalLM.from_pretrained(
+            text_encoder_model_name, device_map=device_map, torch_dtype=dtype
+        ).get_decoder()
+        self.text_encoder = self.text_encoder.eval().requires_grad_(False)
+
+    def forward(self, context: Dict, device, **kwargs) -> torch.Tensor:
+        with torch.no_grad():
+            # Grab the text prompt
+            captions = context[self.input_key]
+
+            # Accept the batched input
+            batched_y = []
+            batched_y_mask = []
+
+            start_time = time.perf_counter()
+            for caption in captions:
+                caption_start_time = time.perf_counter()
+                chat = [{"role": "user", "content": caption}]
+                prompts = self.tokenizer.apply_chat_template(
+                    chat, tokenize=False, add_generation_prompt=True
+                )
+
+                # Tokenize the prompts
+                txt_tokens = self.tokenizer(
+                    prompts,
+                    padding="max_length",
+                    max_length=self.max_length,
+                    truncation=True,
+                    return_tensors="pt",
+                    return_length=False,
+                    return_overflowing_tokens=False,
+                )
+
+                # first bos and end N-1
+                select_index = [0] + list(range(-self.max_length + 1, 0))
+
+                input_ids = txt_tokens.input_ids.to(self.text_encoder.device)
+                attention_mask = txt_tokens.attention_mask.to(self.text_encoder.device)
+
+                y = self.text_encoder(input_ids, attention_mask=attention_mask)[0][
+                    :, None
+                ][:, :, select_index]
+
+                y_mask = txt_tokens.attention_mask[:, None, None][:, :, :, select_index]
+                batched_y.append(y)
+                batched_y_mask.append(y_mask)
+
+                caption_end_time = time.perf_counter()
+                caption_latency = caption_end_time - caption_start_time
+            end_time = time.perf_counter()
+            latency = end_time - start_time
+
+            context[self.output_key] = torch.stack(batched_y).to(device)
+            context["text_attention_mask"] = torch.stack(batched_y_mask).to(device)
+
+        return context
