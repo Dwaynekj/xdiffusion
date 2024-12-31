@@ -15,6 +15,7 @@ image_imbeddings
 
 from abc import abstractmethod
 from einops import rearrange
+import time
 import torch
 from transformers import (
     AutoTokenizer,
@@ -65,6 +66,41 @@ class UnconditionalTextPromptsAdapter(torch.nn.Module):
         new_context = context.copy()
         text_prompts = context["text_prompts"]
         new_context["text_prompts"] = [""] * len(text_prompts)
+        return new_context
+
+
+class UnconditionalEmbeddingAdapter(torch.nn.Module):
+    def __init__(self, embedding_shape: List[int]):
+        super().__init__()
+        self.embedding_shape = embedding_shape
+        assert len(embedding_shape) == 2
+        num_tokens = embedding_shape[0]
+        in_channels = embedding_shape[1]
+
+        self.register_buffer(
+            "y_embedding",
+            torch.nn.Parameter(torch.randn(num_tokens, in_channels) / in_channels**0.5),
+        )
+
+    def forward(self, context: Dict):
+        new_context = context.copy()
+        embeddings = context["text_embeddings"]
+
+        # Match the shape of the input embeddings
+        unconditional_text_embeddings = self.y_embedding
+
+        while len(unconditional_text_embeddings.shape) != len(embeddings.shape):
+            unconditional_text_embeddings = unconditional_text_embeddings.unsqueeze(0)
+
+        tile_shape = [1] * len(unconditional_text_embeddings.shape)
+        tile_shape[0] = embeddings.shape[0]
+        unconditional_text_embeddings = torch.tile(
+            unconditional_text_embeddings, dims=tile_shape
+        )
+        assert (
+            unconditional_text_embeddings.shape == embeddings.shape
+        ), f"{unconditional_text_embeddings.shape} {embeddings.shape}"
+        new_context["text_embeddings"] = unconditional_text_embeddings
         return new_context
 
 
@@ -175,6 +211,7 @@ class CLIPTextPromptsPreprocessor(torch.nn.Module):
         self._text_tokenizer = FrozenCLIPTextTokenizer(max_length=text_sequence_length)
 
     def forward(self, context: Dict, device, **kwargs):
+        start_time = time.perf_counter()
         if "text_prompts" in context:
             prompts = context["text_prompts"]
 
@@ -184,6 +221,8 @@ class CLIPTextPromptsPreprocessor(torch.nn.Module):
             # Add the text tokens to the context
             assert "text_tokens" not in context
             context["text_tokens"] = tokens_dict
+        end_time = time.perf_counter()
+        latency = end_time - start_time
         return context
 
 
