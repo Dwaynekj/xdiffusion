@@ -11,3 +11,4 @@ xdiffusion.egg-info/
 tools/terraform/lambdalabs/.terraform*
 tools/terraform/lambdalabs/terraform.tfstate
 tools/terraform/lambdalabs/terraform.tfstate.backup
+.terraform_training_cmd
