@@ -164,3 +164,13 @@ data:
   # The number of classes in the dataset
   num_classes: 10
 
+# Describes parameters of the training process.
+training:
+  # Batch size to use for training
+  batch_size: 64
+  # The number of steps to perform gradient accumulation
+  gradient_accumulation_steps: 1
+  # Mixed precision training settings
+  mixed_precision: "bf16"
+  # The dataset we are training on
+  dataset: "image/mnist"
