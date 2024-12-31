@@ -3,7 +3,11 @@ MNIST/
 output/
 lpips/
 MovingMNIST/
+MNISTEmbeddedGemma2/
 build/
 dist/
 xdiffusion.egg-info/
 .DS_Store
+tools/terraform/lambdalabs/.terraform*
+tools/terraform/lambdalabs/terraform.tfstate
+tools/terraform/lambdalabs/terraform.tfstate.backup
