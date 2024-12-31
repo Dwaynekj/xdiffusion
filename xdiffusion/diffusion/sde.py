@@ -227,6 +227,9 @@ class GaussianDiffusion_SDE(DiffusionModel):
         score = -score / std[:, None, None, None]
         return score
 
+    def forward(self, images: torch.FloatTensor, context: Dict, **kwargs):
+        return self.loss_on_batch(images=images, context=context)
+
     def loss_on_batch(self, images: torch.Tensor, context: Dict) -> Dict:
         """Calculates the reverse process loss on a batch of images.
 
@@ -292,6 +295,7 @@ class GaussianDiffusion_SDE(DiffusionModel):
         num_sampling_steps: Optional[int] = None,
         sampler: Optional[ReverseProcessSampler] = None,
         initial_noise: Optional[torch.Tensor] = None,
+        context_preprocessor: Optional[torch.nn.Module] = None,
     ) -> Tuple[torch.Tensor, Optional[List[torch.Tensor]]]:
         """Unconditionally/conditionally sample from the diffusion model.
 

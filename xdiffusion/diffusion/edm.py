@@ -41,6 +41,9 @@ class GaussianDiffusion_EDM(DiffusionModel):
         self._augment_pipeline = None
         self._sampler = instantiate_from_config(config.diffusion.sampling.to_dict())
 
+    def forward(self, images: torch.FloatTensor, context: Dict, **kwargs):
+        return self.loss_on_batch(images=images, context=context)
+
     def loss_on_batch(self, images: torch.Tensor, context: Dict) -> Dict:
         # Normalize images
         x = normalize_to_neg_one_to_one(images)
@@ -62,6 +65,7 @@ class GaussianDiffusion_EDM(DiffusionModel):
         sampler: Optional[ReverseProcessSampler] = None,
         num_sampling_steps: Optional[int] = None,
         initial_noise: Optional[torch.Tensor] = None,
+        context_preprocessor: Optional[torch.nn.Module] = None,
     ) -> Tuple[torch.Tensor, Optional[List[torch.Tensor]]]:
         # The output shape of the data.
         if "output_frames" in self._config.diffusion.sampling.to_dict():

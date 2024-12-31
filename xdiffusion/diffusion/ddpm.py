@@ -5,8 +5,10 @@ from different papers:
 
 """
 
+import accelerate
 from einops import reduce
 import numpy as np
+import time
 import torch
 from torchinfo import summary
 from tqdm.autonotebook import tqdm
@@ -82,6 +84,7 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         self._context_preprocessors = torch.nn.ModuleList(
             [instantiate_from_config(c) for c in config.diffusion.context_preprocessing]
         )
+
         self._input_preprocessor = instantiate_from_config(
             config.diffusion.input_preprocessing.to_dict()
         )
@@ -136,6 +139,9 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         # EMA not supported yet
         return
 
+    def forward(self, images: torch.FloatTensor, context: Dict, **kwargs):
+        return self.loss_on_batch(images=images, context=context)
+
     def loss_on_batch(self, images, context: Dict, **kwargs) -> Dict:
         """Calculates the reverse process loss on a batch of images.
 
@@ -151,6 +157,8 @@ class GaussianDiffusion_DDPM(DiffusionModel):
             Dictionary of loss values, of which the "loss" entry will
             be the training loss.
         """
+        start_time = time.perf_counter()
+
         B = images.shape[0]
         device = images.device
         context = context.copy()
@@ -229,8 +237,11 @@ class GaussianDiffusion_DDPM(DiffusionModel):
                     ]
                 else:
                     # The context is a tensor type
+                    while len(cfg_mask.shape) != len(conditional_context_signal.shape):
+                        cfg_mask = cfg_mask.unsqueeze(-1)
+
                     updated_context_signal = torch.where(
-                        cfg_mask,
+                        cfg_mask[..., None, None, None],
                         unconditional_context_signal,
                         conditional_context_signal,
                     )
@@ -302,6 +313,9 @@ class GaussianDiffusion_DDPM(DiffusionModel):
 
         self._noise_scheduler.update_with_all_losses(t, total_loss.detach())
         total_loss = total_loss * weights
+
+        end_time = time.perf_counter()
+        latency = end_time - start_time
 
         return {
             "loss": total_loss.mean(),
@@ -524,6 +538,7 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         num_sampling_steps: Optional[int] = None,
         sampler: Optional[ReverseProcessSampler] = None,
         initial_noise: Optional[torch.Tensor] = None,
+        context_preprocessor: Optional[torch.nn.Module] = None,
     ) -> Tuple[torch.Tensor, Optional[List[torch.Tensor]]]:
         """Unconditionally/conditionally sample from the diffusion model.
 
@@ -564,6 +579,10 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         # Generate the unconditional context for classifier free guidance
         if classifier_free_guidance is not None:
             unconditional_context = self._unconditional_context(context)
+            if context_preprocessor is not None:
+                unconditional_context = context_preprocessor(
+                    unconditional_context, device
+                )
             for preprocessor in self._context_preprocessors:
                 unconditional_context = preprocessor(unconditional_context, device)
         else:
@@ -576,6 +595,10 @@ class GaussianDiffusion_DDPM(DiffusionModel):
                 context["augmentation_level"] = (
                     self._config.super_resolution.sampling_augmentation_level
                 )
+
+        # First do any sampling specific context preprocessors
+        if context_preprocessor is not None:
+            context = context_preprocessor(context, device)
 
         # Preprocess any of the context before it hits the score network.
         # For example, if we have prompts, then convert them
@@ -638,6 +661,7 @@ class GaussianDiffusion_DDPM(DiffusionModel):
     def print_model_summary(self):
         batch_size = 4
         device = "cuda" if torch.cuda.is_available() else "cpu"
+        dtype = torch.float32
 
         B = batch_size
         C = self._config.data.num_channels
@@ -658,27 +682,28 @@ class GaussianDiffusion_DDPM(DiffusionModel):
 
         summary_context = {
             "timestep": (
-                torch.rand(size=(batch_size,), device=device)
+                torch.rand(size=(batch_size,), dtype=dtype, device=device)
                 if self._noise_scheduler.continuous()
                 else torch.randint(0, 10, size=(batch_size,), device=device)
             ),
-            "logsnr_t": torch.rand(size=(batch_size,), device=device),
+            "logsnr_t": torch.rand(size=(batch_size,), dtype=dtype, device=device),
             "text_prompts": [""] * batch_size,
+            "text_embeddings": torch.rand(
+                size=(batch_size, 300, 2304), dtype=dtype, device=device
+            ),
             "classes": torch.randint(
                 0, self._config.data.num_classes, size=(batch_size,), device=device
             ),
             # Video specific context, ignored for image
-            "x0": torch.zeros(B, C, F, H, W),
+            "x0": torch.zeros(B, C, F, H, W, dtype=dtype),
             "frame_indices": torch.tile(
                 torch.arange(end=F, device=device)[None, ...],
                 (B, 1),
             ),
             "observed_mask": torch.zeros(
-                size=(B, C, F, 1, 1), dtype=torch.float32, device=device
+                size=(B, C, F, 1, 1), dtype=dtype, device=device
             ),
-            "latent_mask": torch.ones(
-                size=(B, C, F, 1, 1), dtype=torch.float32, device=device
-            ),
+            "latent_mask": torch.ones(size=(B, C, F, 1, 1), dtype=dtype, device=device),
             "video_mask": torch.ones(size=(B, F), dtype=torch.bool, device=device),
         }
 
@@ -690,6 +715,7 @@ class GaussianDiffusion_DDPM(DiffusionModel):
                     self._config.super_resolution.low_resolution_size,
                     self._config.super_resolution.low_resolution_size,
                     device=device,
+                    dtype=dtype,
                 )
             )
             summary_context["augmentation_timestep"] = torch.randint(
@@ -716,6 +742,7 @@ class GaussianDiffusion_DDPM(DiffusionModel):
                             input_spatial_size[0],
                             input_spatial_size[1],
                             device=device,
+                            dtype=dtype,
                         )
                         if is_video
                         else torch.rand(
@@ -724,6 +751,7 @@ class GaussianDiffusion_DDPM(DiffusionModel):
                             input_spatial_size[0],
                             input_spatial_size[1],
                             device=device,
+                            dtype=dtype,
                         )
                     ),
                     summary_context,

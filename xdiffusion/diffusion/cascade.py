@@ -76,6 +76,62 @@ class GaussianDiffusionCascade(DiffusionModel):
             )
         return optimizers
 
+    def forward(self, images: torch.FloatTensor, context: Dict, **kwargs):
+        # Sum the losses from each of the stages
+        stage_loss = 0
+        for model in self.models():
+            config_for_layer = model.config()
+            context_for_layer = context.copy()
+            images_for_layer = images
+
+            if "super_resolution" in config_for_layer:
+                # First create the low resolution context.
+                low_resolution_spatial_size = (
+                    config_for_layer.super_resolution.low_resolution_size
+                )
+                low_resolution_images = transforms.functional.resize(
+                    images,
+                    size=(
+                        low_resolution_spatial_size,
+                        low_resolution_spatial_size,
+                    ),
+                    antialias=True,
+                )
+                context_for_layer[
+                    config_for_layer.super_resolution.conditioning_key
+                ] = low_resolution_images
+
+            # If the images are not the right shape for the model input, then
+            # we need to resize them too. This could happen if we are the intermediate
+            # super resolution layers of a multi-layer cascade.
+            model_input_spatial_size = config_for_layer.data.image_size
+
+            B, C, H, W = images.shape
+            if H != model_input_spatial_size or W != model_input_spatial_size:
+                images_for_layer = transforms.functional.resize(
+                    images,
+                    size=(
+                        model_input_spatial_size,
+                        model_input_spatial_size,
+                    ),
+                    antialias=True,
+                )
+
+            try:
+                loss_dict = model.loss_on_batch(
+                    images=images_for_layer, context=context_for_layer
+                )
+                loss = loss_dict["loss"]
+            except torch.cuda.OutOfMemoryError as e:
+                import gc
+
+                for obj in gc.get_objects():
+                    if torch.is_tensor(obj) and obj.is_cuda:
+                        print(f"{type(obj)} : {obj.size()} {obj.shape} {obj.dtype}")
+                raise e
+            stage_loss += loss
+        return {"loss": stage_loss}
+
     def loss_on_batch(self, images, context: Dict, stage_idx: int, **kwargs) -> Dict:
         """Calculates the reverse process loss on a batch of images.
 
@@ -97,6 +153,7 @@ class GaussianDiffusionCascade(DiffusionModel):
         classifier_free_guidance: Optional[float] = None,
         sampler: Optional[ReverseProcessSampler] = None,
         initial_noise: Optional[torch.Tensor] = None,
+        context_preprocessor: Optional[torch.nn.Module] = None,
     ) -> Tuple[torch.Tensor, Optional[List[torch.Tensor]]]:
         assert initial_noise is None
         assert sampler is None

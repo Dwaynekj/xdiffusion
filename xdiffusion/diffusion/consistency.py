@@ -73,6 +73,9 @@ class GaussianDiffusion_ConsistencyModel(DiffusionModel):
         self._augment_pipeline = None
         self._sampler = instantiate_from_config(config.diffusion.sampling.to_dict())
 
+    def forward(self, images: torch.FloatTensor, context: Dict, **kwargs):
+        return self.loss_on_batch(images=images, context=context)
+
     def loss_on_batch(self, images: torch.Tensor, context: Dict) -> Dict:
         step = context["step"]
         total_steps = context["total_steps"]
@@ -198,6 +201,7 @@ class GaussianDiffusion_ConsistencyModel(DiffusionModel):
         num_sampling_steps: Optional[int] = None,
         sampler: Optional[ReverseProcessSampler] = None,
         initial_noise: Optional[torch.Tensor] = None,
+        context_preprocessor: Optional[torch.nn.Module] = None,
     ) -> Tuple[torch.Tensor, Optional[List[torch.Tensor]]]:
         # The output shape of the data.
         if "output_frames" in self._config.diffusion.sampling.to_dict():
