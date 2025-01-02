@@ -61,6 +61,7 @@ class AncestralSampler(ReverseProcessSampler):
         # where sigma(t) = sqrt(Beta_t), in the score SDE notation.
         pred = diffusion_model.predict_score(x, context=context)
 
+        # TODO: Implement CFG for the rectified flow sampler
         # convert to diffusion models if sampling.sigma_variance > 0.0
         # while perserving the marginal probability.
         sigma_t = sde.sigma_t(num_t)
