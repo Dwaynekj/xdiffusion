@@ -309,6 +309,11 @@ class SanaScoreNetwork(torch.nn.Module):
         timestep = context["timestep"]
         encoder_hidden_states = context["text_embeddings"]
 
+        if "text_attention_mask" in context:
+            text_attention_masks = context["text_attention_mask"].to(torch.bool)
+        else:
+            text_attention_masks = None
+
         # Make sure the encoder hidden states and the hidden states
         # are the same dtype
         encoder_hidden_states = encoder_hidden_states.to(hidden_states.dtype)
@@ -339,7 +344,7 @@ class SanaScoreNetwork(torch.nn.Module):
                 hidden_states,
                 attention_mask=None,
                 encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=None,
+                encoder_attention_mask=text_attention_masks,
                 timestep=timestep,
                 height=post_patch_height,
                 width=post_patch_width,

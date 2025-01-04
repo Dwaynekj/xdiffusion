@@ -21,6 +21,8 @@ Second, since we still need to run the language model at inference time (since w
 
 Both of the above approaches are common approaches when training larger models.
 
+Another thing to note is that we have reduced the width of the inner dimension of the transformer blocks from 2240 -> 1152. This is still overkill for this model, and we should reduce this even further for faster training. For example, in the Flux model we trained here, we reduced the inner dimension to 384.
+
 In this repository, we will be working with the [MNIST](https://en.wikipedia.org/wiki/MNIST_database) dataset because it is simple and can be trained in real time with minimal GPU power and memory. The main difference between MNIST and other datasets is the single channel of the imagery, versus 3 channels in most other datasets. We will make sure that the models we build can easily accomodate 1- or 3-channel data, so that you can test the models we build on other datasets.
 
 ## Configuration File

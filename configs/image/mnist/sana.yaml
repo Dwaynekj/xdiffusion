@@ -63,14 +63,16 @@ diffusion:
       out_channels: 1
       caption_channels: 2304
 
-      # Yields an inner dimension of 32*70 = 2240
+      # Yields an inner dimension of 32*36 = 1152
       attention_head_dim: 32
       num_attention_heads: 36
+
       # The cross attention heads total dimension must
-      # match the self attention: 20 * 112 = 2240 = 32 * 70
+      # match the self attention: 16 * 72 = 1152 = 32 * 36
       num_cross_attention_heads: 16
       cross_attention_head_dim: 72
       cross_attention_dim: 1152
+
       dropout: 0.0
       mlp_ratio: 2.5
       num_layers: 12
