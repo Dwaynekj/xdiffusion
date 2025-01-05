@@ -27,14 +27,14 @@ In this repository, we will be working with the [MNIST](https://en.wikipedia.org
 
 ## Configuration File
 
-The configuration file is located in [Flux](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/sana.yaml).
+The configuration file is located in [Sana](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/sana.yaml).
 
 ## Training
 
 To train the sana model, use:
 
 ```
-> python training/image/train.py --config_path configs/image/mnist/flux.yaml --dataset_name "image/mnist"
+> python training/image/train.py --config_path configs/image/mnist/sana.yaml
 ```
 
 We successfully tested training on a single T4 instance (16GB VRAM) using a batch size of 64.
@@ -46,35 +46,34 @@ NOTE: The Gemma 2 family of language models is protected behind a gated repo on 
 To sample from a pretrained checkpoint, you can run:
 
 ```
-> python sampling/image/mnist/sample.py --config_path configs/image/mnist/flux.yaml --num_samples 8 --checkpoint output/image/mnist/flux/diffusion-10000.pt
+> python sampling/image/mnist/sample.py --config_path configs/image/mnist/sana.yaml --num_samples 8 --checkpoint output/image/mnist/sana/diffusion-10000.pt
 ```
 
-Output will be saved to the `output/image/mnist/sample/flux` directory.
+Output will be saved to the `output/image/mnist/sample/sana` directory.
 
 ## Results and Checkpoints
 
 | Config | Checkpoint | Results
 | ------ | ---------- | -------
-| [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/flux.yaml) | [google drive](https://drive.google.com/file/d/1atzhtv-kRegnabROGZs6olxuVONiRQKI/view?usp=sharing) | ![Flux](https://drive.google.com/uc?export=view&id=1_r8poe1SJxf8UtT4mmQaTT378m26hD-F)
+| [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/sana.yaml) | [google drive](https://drive.google.com/file/d/1atzhtv-kRegnabROGZs6olxuVONiRQKI/view?usp=sharing) | ![Sana](https://drive.google.com/uc?export=view&id=1_sUwEAQkN58xtGwJP69q94WO9NxmOWDO)
 
+After training the network for 10k steps, the sana model pipeline is able to generate samples like the below:
 
-After training the network for 30k steps, the flux model pipeline is able to generate samples like the below:
-
-![Flux](https://drive.google.com/uc?export=view&id=1_r8poe1SJxf8UtT4mmQaTT378m26hD-F)
+![Sana](https://drive.google.com/uc?export=view&id=1_sUwEAQkN58xtGwJP69q94WO9NxmOWDO)
 
 The prompts we used for generation above were:
 
 <pre>
-3 5 six 5 six 9 six four 
-5 zero eight one six 9 1 three 
-two 2 8 8 zero six seven 5 
-4 6 0 3 three 6 six four 
-one 5 nine 2 5 6 2 three 
-six four 0 4 one 8 eight five 
-0 8 5 two four nine seven 1 
-seven four four 2 eight 9 8 4 
+4 two 4 six 4 five 4 7 
+3 1 three 3 two 3 8 zero 
+6 six six 5 2 8 3 five 
+zero 1 eight nine 8 eight two eight 
+3 5 4 3 6 9 four nine 
+0 8 8 one 2 4 eight 7 
+nine 9 two 3 2 9 9 9 
+four 9 1 seven 1 5 seven five
 </pre>
 
 ## Other Resources
 
-The others released their inference code and model checkpoints [here](https://github.com/black-forest-labs/flux).
+The Sana team released their training and inference code at [github](https://github.com/NVlabs/Sana).
