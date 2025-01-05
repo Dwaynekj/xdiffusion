@@ -220,8 +220,8 @@ class MNISTEmbedded(Dataset):
             torch.from_numpy(image_data[example_idx].copy()),
             torch.tensor(label_data[example_idx]),
             {
-                "text_embeddings": torch.from_numpy(embedding_data[example_idx].copy()),
-                "text_attention_mask": torch.from_numpy(mask_data[example_idx].copy()),
+                "text_embeddings": torch.from_numpy(embedding_data[example_idx].copy()).squeeze(0),
+                "text_attention_mask": torch.from_numpy(mask_data[example_idx].copy()).squeeze(0),
             },
         )
 

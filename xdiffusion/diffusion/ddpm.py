@@ -158,7 +158,6 @@ class GaussianDiffusion_DDPM(DiffusionModel):
             be the training loss.
         """
         start_time = time.perf_counter()
-
         B = images.shape[0]
         device = images.device
         context = context.copy()
@@ -241,7 +240,7 @@ class GaussianDiffusion_DDPM(DiffusionModel):
                         cfg_mask = cfg_mask.unsqueeze(-1)
 
                     updated_context_signal = torch.where(
-                        cfg_mask[..., None, None, None],
+                        cfg_mask,
                         unconditional_context_signal,
                         conditional_context_signal,
                     )
