@@ -56,7 +56,6 @@ The following is a list of the supported image models, their current results, an
 | November 2024 | | [Training-free Regional Prompting for Diffusion Transformers](https://arxiv.org/abs/2411.02395) | | |
 | November 2024 | JanusFlow | [JanusFlow: Harmonizing Autoregression and Rectified Flow for Unified Multimodal Understanding and Generation](https://arxiv.org/abs/2411.07975) | | |
 
-https://drive.google.com/file/d/1_sUwEAQkN58xtGwJP69q94WO9NxmOWDO/view?usp=sharing
 ## Video Diffusion
 
 ### Training Datasets
