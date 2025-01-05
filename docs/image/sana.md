@@ -55,7 +55,7 @@ Output will be saved to the `output/image/mnist/sample/sana` directory.
 
 | Config | Checkpoint | Results
 | ------ | ---------- | -------
-| [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/sana.yaml) | [google drive](https://drive.google.com/file/d/1atzhtv-kRegnabROGZs6olxuVONiRQKI/view?usp=sharing) | ![Sana](https://drive.google.com/uc?export=view&id=1_sUwEAQkN58xtGwJP69q94WO9NxmOWDO)
+| [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/sana.yaml) | [google drive](https://drive.google.com/file/d/1ksqyJPn25QjftDk_g0sOS3Qqv2p1N8Jz/view?usp=sharing) | ![Sana](https://drive.google.com/uc?export=view&id=1_sUwEAQkN58xtGwJP69q94WO9NxmOWDO)
 
 After training the network for 10k steps, the sana model pipeline is able to generate samples like the below:
 
