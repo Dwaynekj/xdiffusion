@@ -1,4 +1,12 @@
-# Stable Diffusion 3 rectified flow model.
+# Stable Diffusion 3.5 rectified flow model.
+#
+# The 3.5 model is based on the SD 3.0 model with a few small architectural
+# changes. Here, we are based on the SD 3.5 Medium model, because it adds a new
+# dual attention mechanism in some of the transformer blocks, where it combines both
+# cross attention with the text embeddings and self attention on the image itself.
+#
+# The original 3.5 Medium model used a depth of 24 layers, with dual attention on
+# layers 0-12. We will use dual attention on layers 0-6 since we use only 12 layers here.
 diffusion:
   parameterization: "rectified_flow"
   # Sampling section determines the size of the sampled output
@@ -55,20 +63,26 @@ diffusion:
       params: {}
   # Defines the score network for predicting the noise parameter
   score_network:
-    target: xdiffusion.score_networks.sd3.SD3Transformer2DModel
+    target: xdiffusion.score_networks.sd35.SD35Transformer2DModel
     params:
+      # Spatial size of the image/latent input
       input_spatial_size: 32
       # Model input channels
       input_channels: 1
-      is_learned_sigma: False
-      is_class_conditional: False
-      sample_size: 32
-      patch_size: 8
-      in_channels: 1
+      # Output channels for the model
       out_channels: 1
+      # Sample size of the image/latent input
+      sample_size: 32
+      # Patch size for image patchification
+      patch_size: 8
+      # Number of transformer layers in the model
       num_layers: 12
+      # Dimension of each attention head
       attention_head_dim: 64
+      # Number of attention heads
       num_attention_heads: 6
+      # Layers to use dual attention (self attention on the image)
+      dual_attention_layers: [0,1,2,3,4,5,6]
       # The joint CLIP/T5 prompt embeddings
       joint_attention_dim: 2048
       # Dimensions to project the joint CLIP/T5 prompts to.
@@ -78,6 +92,10 @@ diffusion:
       pooled_projection_dim: 2048
       # Maximum number of position embeddings in a grid - sqrt(num_patches)
       pos_embed_max_size: 4
+      # True if learned variance
+      is_learned_sigma: False
+      # True if we are learning class conditional
+      is_class_conditional: False
       # Additional conditioning signals for the model. The projections
       # defined here will be applied before running through the rest of the
       # score network.
@@ -101,3 +119,13 @@ data:
   # The number of classes in the dataset
   num_classes: 10
 
+# Describes parameters of the training process.
+training:
+  # Batch size to use for training
+  batch_size: 2
+  # The number of steps to perform gradient accumulation
+  gradient_accumulation_steps: 1
+  # Mixed precision training settings
+  mixed_precision: "no"
+  # The dataset we are training on
+  dataset: "image/mnist"
