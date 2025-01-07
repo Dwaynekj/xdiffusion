@@ -93,7 +93,7 @@ diffusion:
       # Query/Key normalization
       qk_norm: "rms_norm"
       # Maximum number of position embeddings in a grid - sqrt(num_patches)
-      pos_embed_max_size: 4
+      pos_embed_max_size: 384
       # True if learned variance
       is_learned_sigma: False
       # True if we are learning class conditional
