@@ -122,10 +122,10 @@ data:
 # Describes parameters of the training process.
 training:
   # Batch size to use for training
-  batch_size: 2
+  batch_size: 64
   # The number of steps to perform gradient accumulation
   gradient_accumulation_steps: 1
   # Mixed precision training settings
-  mixed_precision: "no"
+  mixed_precision: "bf16"
   # The dataset we are training on
   dataset: "image/mnist"
