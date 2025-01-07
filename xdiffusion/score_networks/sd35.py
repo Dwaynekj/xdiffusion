@@ -72,6 +72,7 @@ class SD35Transformer2DModel(torch.nn.Module):
                     attention_head_dim=self._config.attention_head_dim,
                     context_pre_only=(i == self._config.num_layers - 1),
                     use_dual_attention=(i in self._config.dual_attention_layers),
+                    qk_norm=self._config.qk_norm,
                 )
                 for i in range(self._config.num_layers)
             ]

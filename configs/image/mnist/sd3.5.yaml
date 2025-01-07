@@ -90,6 +90,8 @@ diffusion:
       caption_projection_dim: 384
       # Dimensions of the combined CLIP pooled projections.
       pooled_projection_dim: 2048
+      # Query/Key normalization
+      qk_norm: "rms_norm"
       # Maximum number of position embeddings in a grid - sqrt(num_patches)
       pos_embed_max_size: 4
       # True if learned variance
