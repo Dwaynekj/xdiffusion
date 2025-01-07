@@ -1,5 +1,6 @@
 from accelerate import cpu_offload, Accelerator, DataLoaderConfiguration
 from accelerate.utils import GradientAccumulationPlugin
+from accelerate import DistributedDataParallelKwargs
 import argparse
 import math
 import os
@@ -96,6 +97,8 @@ def train(
         if not mixed_precision:
             mixed_precision = "no"
 
+    ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+
     # The accelerate library will handle of the GPU device management for us.
     # Make sure to create it early so that we can gate some data loading on it.
     accelerator = Accelerator(
@@ -110,6 +113,7 @@ def train(
             if gradient_accumulation_steps > 1
             else None
         ),
+        kwargs_handlers=[ddp_kwargs],
         step_scheduler_with_optimizer=False,
     )
     accelerator.print(
