@@ -61,6 +61,6 @@ data:
 # strategies for input data.
 training:
   dataset: "video/moving_mnist"
-  batch_size: 4
+  batch_size: 32
   gradient_accumulation_steps: 1
-  mixed_precision: "no"
+  mixed_precision: "bf16"
