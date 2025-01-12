@@ -1,3 +1,5 @@
+from collections import namedtuple
+from einops import rearrange
 import functools
 import hashlib
 import os
@@ -7,7 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
 from torchvision import models
-from collections import namedtuple
+from torch_dwt.functional import dwt3
 
 
 class LPIPSWithDiscriminator(nn.Module):
@@ -25,6 +27,10 @@ class LPIPSWithDiscriminator(nn.Module):
         use_actnorm=False,
         disc_conditional=False,
         disc_loss="hinge",
+        use_3d=False,
+        use_reconstruction_gan=False,
+        wavelet_loss_weight=0.0,
+        rec_loss="l1",
     ):
 
         super().__init__()
@@ -36,14 +42,49 @@ class LPIPSWithDiscriminator(nn.Module):
         # output log variance
         self.logvar = nn.Parameter(torch.ones(size=()) * logvar_init)
 
-        self.discriminator = NLayerDiscriminator(
-            input_nc=disc_in_channels, n_layers=disc_num_layers, use_actnorm=use_actnorm
-        ).apply(weights_init)
+        if use_reconstruction_gan:
+            self.discriminator = (
+                NLayerDiscriminator(
+                    input_nc=disc_in_channels * 2,
+                    output_nc=2,
+                    n_layers=disc_num_layers,
+                    use_actnorm=use_actnorm,
+                ).apply(weights_init)
+                if not use_3d
+                else NLayerDiscriminator3D(
+                    input_nc=disc_in_channels * 2,
+                    output_nc=2,
+                    n_layers=disc_num_layers,
+                    use_actnorm=use_actnorm,
+                ).apply(weights_init)
+            )
+        else:
+            self.discriminator = (
+                NLayerDiscriminator(
+                    input_nc=disc_in_channels,
+                    n_layers=disc_num_layers,
+                    use_actnorm=use_actnorm,
+                ).apply(weights_init)
+                if not use_3d
+                else NLayerDiscriminator3D(
+                    input_nc=disc_in_channels,
+                    n_layers=disc_num_layers,
+                    use_actnorm=use_actnorm,
+                ).apply(weights_init)
+            )
+        self.wavelet_loss_weight = wavelet_loss_weight
+
+        if wavelet_loss_weight > 0.0:
+            assert use_3d
+            self.wavelet_loss = WaveletLoss3D()
+
+        self.rec_loss = rec_loss
         self.discriminator_iter_start = disc_start
         self.disc_loss = hinge_d_loss if disc_loss == "hinge" else vanilla_d_loss
         self.disc_factor = disc_factor
         self.discriminator_weight = disc_weight
         self.disc_conditional = disc_conditional
+        self.use_reconstruction_gan = use_reconstruction_gan
 
     def calculate_adaptive_weight(self, nll_loss, g_loss, last_layer=None):
         if last_layer is not None:
@@ -74,12 +115,25 @@ class LPIPSWithDiscriminator(nn.Module):
         split="train",
         weights=None,
     ):
-        rec_loss = torch.abs(inputs.contiguous() - reconstructions.contiguous())
+        if self.rec_loss == "l1":
+            rec_loss = torch.abs(inputs.contiguous() - reconstructions.contiguous())
+        else:
+            assert self.rec_loss == "l2"
+            rec_loss = (inputs.contiguous() - reconstructions.contiguous()) ** 2
+
         if self.perceptual_weight > 0:
             p_loss = self.perceptual_loss(
                 inputs.contiguous(), reconstructions.contiguous()
             )
             rec_loss = rec_loss + self.perceptual_weight * p_loss
+
+        if self.wavelet_loss_weight > 0.0:
+            w_loss = self.wavelet_loss(
+                reconstructions.contiguous(), inputs.contiguous()
+            )
+            rec_loss = rec_loss + self.wavelet_loss_weight * w_loss
+        else:
+            w_loss = 0.0
 
         nll_loss = rec_loss / torch.exp(self.logvar) + self.logvar
         weighted_nll_loss = nll_loss
@@ -95,9 +149,22 @@ class LPIPSWithDiscriminator(nn.Module):
             # generator update
             if cond is None:
                 assert not self.disc_conditional
-                logits_fake = self.discriminator(reconstructions.contiguous())
+
+                if self.use_reconstruction_gan:
+                    # If using the reconstruction GAN loss, then we pass in both the
+                    # reconstructed image and the real image. We don't use the real part
+                    # of the discriminator in the G loss.
+                    logits_real_fake = self.discriminator(
+                        torch.cat(
+                            [reconstructions.contiguous(), inputs.contiguous()], dim=1
+                        ).contiguous()
+                    )
+                    logits_fake, _ = torch.chunk(logits_real_fake, 2, dim=1)
+                else:
+                    logits_fake = self.discriminator(reconstructions.contiguous())
             else:
                 assert self.disc_conditional
+                assert not self.use_reconstruction_gan
                 logits_fake = self.discriminator(
                     torch.cat((reconstructions.contiguous(), cond), dim=1)
                 )
@@ -132,26 +199,69 @@ class LPIPSWithDiscriminator(nn.Module):
                 "{}/d_weight".format(split): d_weight.detach(),
                 "{}/disc_factor".format(split): torch.tensor(disc_factor),
                 "{}/g_loss".format(split): g_loss.detach().mean(),
+                "{}/w_loss".format(split): w_loss.detach().mean(),
+                "{}/w_loss_weight".format(split): torch.tensor(
+                    self.wavelet_loss_weight
+                ),
             }
             return loss, log
 
         if optimizer_idx == 1:
             # second pass for discriminator update
             if cond is None:
-                logits_real = self.discriminator(inputs.contiguous().detach())
-                logits_fake = self.discriminator(reconstructions.contiguous().detach())
+                if self.use_reconstruction_gan:
+                    # If using the reconstruction GAN loss, then we pass in both the
+                    # reconstructed image and the real image.
+                    logits_fake_real = self.discriminator(
+                        torch.cat(
+                            [
+                                reconstructions.contiguous().detach(),
+                                inputs.contiguous().detach(),
+                            ],
+                            dim=1,
+                        ).contiguous()
+                    )
+                    logits_fake_a, logits_real_a = torch.chunk(
+                        logits_fake_real, 2, dim=1
+                    )
+
+                    logits_real_fake = self.discriminator(
+                        torch.cat(
+                            [
+                                inputs.contiguous().detach(),
+                                reconstructions.contiguous().detach(),
+                            ],
+                            dim=1,
+                        ).contiguous()
+                    )
+                    logits_real_b, logits_fake_b = torch.chunk(
+                        logits_real_fake, 2, dim=1
+                    )
+                    disc_loss = self.disc_loss(
+                        logits_real_a, logits_fake_a
+                    ) + self.disc_loss(logits_real_b, logits_fake_b)
+                    logits_real = logits_real_a + logits_real_b
+                    logits_fake = logits_fake_a + logits_fake_b
+                else:
+                    logits_real = self.discriminator(inputs.contiguous().detach())
+                    logits_fake = self.discriminator(
+                        reconstructions.contiguous().detach()
+                    )
+                    disc_loss = self.disc_loss(logits_real, logits_fake)
             else:
+                assert not self.use_reconstruction_gan
                 logits_real = self.discriminator(
                     torch.cat((inputs.contiguous().detach(), cond), dim=1)
                 )
                 logits_fake = self.discriminator(
                     torch.cat((reconstructions.contiguous().detach(), cond), dim=1)
                 )
+                disc_loss = self.disc_loss(logits_real, logits_fake)
 
             disc_factor = adopt_weight(
                 self.disc_factor, global_step, threshold=self.discriminator_iter_start
             )
-            d_loss = disc_factor * self.disc_loss(logits_real, logits_fake)
+            d_loss = disc_factor * disc_loss
 
             log = {
                 "{}/disc_loss".format(split): d_loss.clone().detach().mean(),
@@ -175,7 +285,7 @@ class NLayerDiscriminator(nn.Module):
     --> see https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/models/networks.py
     """
 
-    def __init__(self, input_nc=3, ndf=64, n_layers=3, use_actnorm=False):
+    def __init__(self, input_nc=3, output_nc=1, ndf=64, n_layers=3, use_actnorm=False):
         """Construct a PatchGAN discriminator
         Parameters:
             input_nc (int)  -- the number of channels in input images
@@ -235,7 +345,84 @@ class NLayerDiscriminator(nn.Module):
         ]
 
         sequence += [
-            nn.Conv2d(ndf * nf_mult, 1, kernel_size=kw, stride=1, padding=padw)
+            nn.Conv2d(ndf * nf_mult, output_nc, kernel_size=kw, stride=1, padding=padw)
+        ]  # output 1 channel prediction map
+        self.main = nn.Sequential(*sequence)
+
+    def forward(self, input):
+        """Standard forward."""
+        return self.main(input)
+
+
+class NLayerDiscriminator3D(nn.Module):
+    """Defines a PatchGAN discriminator as in Pix2Pix
+    --> see https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/models/networks.py
+
+    Extended to 3D.
+    """
+
+    def __init__(self, input_nc=3, output_nc=1, ndf=64, n_layers=3, use_actnorm=False):
+        """Construct a PatchGAN discriminator
+        Parameters:
+            input_nc (int)  -- the number of channels in input images
+            ndf (int)       -- the number of filters in the last conv layer
+            n_layers (int)  -- the number of conv layers in the discriminator
+            norm_layer      -- normalization layer
+        """
+        super(NLayerDiscriminator3D, self).__init__()
+        if not use_actnorm:
+            norm_layer = nn.BatchNorm3d
+        else:
+            assert False, "Activation norm not supported in 3d."
+
+        if (
+            type(norm_layer) == functools.partial
+        ):  # no need to use bias as BatchNorm2d has affine parameters
+            use_bias = norm_layer.func != nn.BatchNorm3d
+        else:
+            use_bias = norm_layer != nn.BatchNorm3d
+
+        kw = 4
+        padw = 1
+        sequence = [
+            nn.Conv3d(input_nc, ndf, kernel_size=kw, stride=2, padding=padw),
+            nn.LeakyReLU(0.2, True),
+        ]
+        nf_mult = 1
+        nf_mult_prev = 1
+        for n in range(1, n_layers):  # gradually increase the number of filters
+            nf_mult_prev = nf_mult
+            nf_mult = min(2**n, 8)
+            sequence += [
+                nn.Conv3d(
+                    ndf * nf_mult_prev,
+                    ndf * nf_mult,
+                    kernel_size=kw,
+                    stride=2,
+                    padding=padw,
+                    bias=use_bias,
+                ),
+                norm_layer(ndf * nf_mult),
+                nn.LeakyReLU(0.2, True),
+            ]
+
+        nf_mult_prev = nf_mult
+        nf_mult = min(2**n_layers, 8)
+        sequence += [
+            nn.Conv3d(
+                ndf * nf_mult_prev,
+                ndf * nf_mult,
+                kernel_size=kw,
+                stride=1,
+                padding=padw,
+                bias=use_bias,
+            ),
+            norm_layer(ndf * nf_mult),
+            nn.LeakyReLU(0.2, True),
+        ]
+
+        sequence += [
+            nn.Conv3d(ndf * nf_mult, output_nc, kernel_size=kw, stride=1, padding=padw)
         ]  # output 1 channel prediction map
         self.main = nn.Sequential(*sequence)
 
@@ -330,6 +517,25 @@ class ActNorm(nn.Module):
         return h
 
 
+class WaveletLoss3D(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, inputs, targets):
+        l1_loss = torch.abs(
+            dwt3(inputs.contiguous(), "haar") - dwt3(targets.contiguous(), "haar")
+        )
+
+        # Average over the number of wavelet filters, reducing the dimensions
+        l1_loss = torch.mean(l1_loss, dim=1)
+
+        # Average over all of the filter banks, keeping dimensions
+        l1_loss = torch.mean(l1_loss, dim=-1, keepdim=True)
+        l1_loss = torch.mean(l1_loss, dim=-2, keepdim=True)
+        l1_loss = torch.mean(l1_loss, dim=-3, keepdim=True)
+        return l1_loss
+
+
 class LPIPS(nn.Module):
     # Learned perceptual metric
     def __init__(self, use_dropout=True):
@@ -365,6 +571,23 @@ class LPIPS(nn.Module):
         return model
 
     def forward(self, input, target):
+        B = input.shape[0]
+        num_dims = len(input.shape)
+
+        # If the input is 3D, we need to move the temporal dimension into the
+        # batch dimension.
+        if num_dims == 5:
+            assert len(target.shape) == 5
+            input = rearrange(input, "b c f h w -> (b f) c h w")
+            target = rearrange(target, "b c f h w -> (b f) c h w")
+
+        # If the input is only single channel, repeat the channels until
+        # they match the model input (3 channel)
+        if input.shape[1] == 1:
+            assert target.shape[1] == 1
+            input = torch.tile(input, (1, 3, 1, 1))
+            target = torch.tile(target, (1, 3, 1, 1))
+
         in0_input, in1_input = (self.scaling_layer(input), self.scaling_layer(target))
         outs0, outs1 = self.net(in0_input), self.net(in1_input)
         feats0, feats1, diffs = {}, {}, {}
@@ -382,6 +605,14 @@ class LPIPS(nn.Module):
         val = res[0]
         for l in range(1, len(self.chns)):
             val += res[l]
+
+        if num_dims == 5:
+            # The batch channel contains the frame information.
+            # Currently we are shape "(b f) 1 1 1". Convert this to
+            # "b 1 f 1 1", then average the frame dimension.
+            val = rearrange(val, "(b f) c h w -> b c f h w", b=B)
+            val = torch.mean(val, dim=2, keepdim=True)
+
         return val
 
 
