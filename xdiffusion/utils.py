@@ -380,7 +380,33 @@ def dynamic_thresholding(x, p=0.995, c=1.7):
     return x_compressed
 
 
+def largest_perfect_square(n):
+    """
+    Find the largest perfect square less than or equal to a given number n.
+
+    Parameters:
+        n (int): The input number.
+
+    Returns:
+        int: The largest perfect square less than or equal to n.
+    """
+    if n < 0:
+        raise ValueError("Input must be a non-negative integer.")
+
+    # Calculate the integer part of the square root of n
+    sqrt_n = int(math.sqrt(n))
+
+    # Return the square of the result
+    return sqrt_n**2
+
+
 def video_tensor_to_gif(tensor, path, duration=120, loop=0, optimize=True):
+    B = tensor.shape[0]
+
+    # Make sure the batch size has roots
+    num_samples = largest_perfect_square(B)
+    tensor = tensor[:num_samples, ...]
+
     # Convert the tensor of (B, C, F, H, W) to a grid of (C, F, H*sqrt(B), W*sqrt(b))
     images_grid = rearrange(
         tensor, "(i j) c f h w -> c f (i h) (j w)", i=int(math.sqrt(tensor.shape[0]))
