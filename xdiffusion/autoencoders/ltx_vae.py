@@ -74,55 +74,6 @@ LTX_VAE_CONFIG_MNIST = {
 
 
 class CausalVideoAutoencoder(torch.nn.Module, VariationalAutoEncoder):
-    # @staticmethod
-    # def from_config(config):
-    #     assert (
-    #         config["_class_name"] == "CausalVideoAutoencoder"
-    #     ), "config must have _class_name=CausalVideoAutoencoder"
-    #     if isinstance(config["dims"], list):
-    #         config["dims"] = tuple(config["dims"])
-
-    #     assert config["dims"] in [2, 3, (2, 1)], "dims must be 2, 3 or (2, 1)"
-
-    #     double_z = config.get("double_z", True)
-    #     latent_log_var = config.get(
-    #         "latent_log_var", "per_channel" if double_z else "none"
-    #     )
-    #     use_quant_conv = config.get("use_quant_conv", True)
-
-    #     if use_quant_conv and latent_log_var == "uniform":
-    #         raise ValueError("uniform latent_log_var requires use_quant_conv=False")
-
-    #     encoder = Encoder(
-    #         dims=config["dims"],
-    #         in_channels=config.get("in_channels", 3),
-    #         out_channels=config["latent_channels"],
-    #         blocks=config.get("encoder_blocks", config.get("blocks")),
-    #         patch_size=config.get("patch_size", 1),
-    #         latent_log_var=latent_log_var,
-    #         norm_layer=config.get("norm_layer", "group_norm"),
-    #     )
-
-    #     decoder = Decoder(
-    #         dims=config["dims"],
-    #         in_channels=config["latent_channels"],
-    #         out_channels=config.get("out_channels", 3),
-    #         blocks=config.get("decoder_blocks", config.get("blocks")),
-    #         patch_size=config.get("patch_size", 1),
-    #         norm_layer=config.get("norm_layer", "group_norm"),
-    #         causal=config.get("causal_decoder", False),
-    #         timestep_conditioning=config.get("timestep_conditioning", False),
-    #     )
-
-    #     dims = config["dims"]
-    #     return CausalVideoAutoencoder(
-    #         encoder=encoder,
-    #         decoder=decoder,
-    #         latent_channels=config["latent_channels"],
-    #         dims=dims,
-    #         use_quant_conv=use_quant_conv,
-    #     )
-
     def __init__(self, config: DotConfig):
         super().__init__()
 
@@ -181,42 +132,6 @@ class CausalVideoAutoencoder(torch.nn.Module, VariationalAutoEncoder):
         self.decoder_params = inspect.signature(self.decoder.forward).parameters
         self.loss = instantiate_from_config(config.loss_config._cfg)
 
-    # def __init__(
-    #     self,
-    #     encoder: torch.nn.Module,
-    #     decoder: torch.nn.Module,
-    #     latent_channels: int = 4,
-    #     dims: int = 2,
-    #     sample_size=512,
-    #     use_quant_conv: bool = True,
-    # ):
-    #     super().__init__()
-
-    #     # pass init params to Encoder
-    #     self.encoder = encoder
-    #     self.use_quant_conv = use_quant_conv
-
-    #     # pass init params to Decoder
-    #     quant_dims = 2 if dims == 2 else 3
-    #     self.decoder = decoder
-    #     if use_quant_conv:
-    #         self.quant_conv = make_conv_nd(
-    #             quant_dims, 2 * latent_channels, 2 * latent_channels, 1
-    #         )
-    #         self.post_quant_conv = make_conv_nd(
-    #             quant_dims, latent_channels, latent_channels, 1
-    #         )
-    #     else:
-    #         self.quant_conv = torch.nn.Identity()
-    #         self.post_quant_conv = torch.nn.Identity()
-    #     self.use_z_tiling = False
-    #     self.use_hw_tiling = False
-    #     self.dims = dims
-    #     self.z_sample_size = 1
-
-    #     self.decoder_params = inspect.signature(self.decoder.forward).parameters
-    #     self.loss = instantiate_from_config(config.loss_config._cfg)
-
     def encode(self, x):
         h = self.encoder(x)
         moments = self.quant_conv(h)
@@ -262,7 +177,7 @@ class CausalVideoAutoencoder(torch.nn.Module, VariationalAutoEncoder):
                 last_layer=self.get_last_layer(),
                 split="train",
             )
-            return aeloss, reconstructions, posterior
+            return aeloss, reconstructions, posterior, log_dict_ae
 
         if optimizer_idx == 1:
             # train the discriminator
@@ -275,7 +190,7 @@ class CausalVideoAutoencoder(torch.nn.Module, VariationalAutoEncoder):
                 last_layer=self.get_last_layer(),
                 split="train",
             )
-            return discloss, reconstructions, posterior
+            return discloss, reconstructions, posterior, log_dict_disc
 
     def get_last_layer(self):
         return self.decoder.conv_out.weight

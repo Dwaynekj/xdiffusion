@@ -32,6 +32,7 @@ from xdiffusion.utils import (
 )
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+LOG_TRAINING_WEIGHTS = 100
 
 
 def train(
@@ -251,14 +252,17 @@ def train(
 
                 # Calculate the loss for each layer
                 current_loss = []
+                log_dict = {}
                 with accelerator.accumulate(vae):
                     for optimizer_idx, optimizer in enumerate(optimizers):
                         with accelerator.autocast():
-                            loss, reconstructions, posterior = vae.training_step(
-                                batch=videos,
-                                batch_idx=-1,
-                                optimizer_idx=optimizer_idx,
-                                global_step=step,
+                            loss, reconstructions, posterior, log_dict_idx = (
+                                vae.training_step(
+                                    batch=videos,
+                                    batch_idx=-1,
+                                    optimizer_idx=optimizer_idx,
+                                    global_step=step,
+                                )
                             )
                             if optimizer_idx == 0:
                                 optimizer_losses = loss
@@ -268,6 +272,7 @@ def train(
                                 optimizer_idx
                             ] += loss.detach().item()
                             current_loss.append(loss.detach().item())
+                            log_dict.update(log_dict_idx)
 
                     # Calculate the gradients at each step in the network.
                     accelerator.backward(optimizer_losses)
@@ -295,6 +300,9 @@ def train(
             progress_bar.set_description(
                 f"loss: {[f'{val:.4f}' for idx, val in enumerate(current_loss)]} avg_loss: {[f'{val:.4f}' for idx, val in enumerate(average_losses)]} KL: {posterior.kl().detach().mean():.4f} posterior_mean: {average_posterior_mean:.4f} posterior_std: {average_posterior_std:.4f}"
             )
+
+            if step % LOG_TRAINING_WEIGHTS == 0:
+                accelerator.print(log_dict)
 
             # To help visualize training, periodically sample from the
             # diffusion model to see how well its doing.
