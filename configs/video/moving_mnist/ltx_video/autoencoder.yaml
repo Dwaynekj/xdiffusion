@@ -29,7 +29,7 @@ vae_config:
     loss_config:
       target: xdiffusion.autoencoders.losses.LPIPSWithDiscriminator
       params:
-        disc_start: 0
+        disc_start: 10000
         kl_weight: 1.0e-06
         perceptual_weight: 0.5
         disc_weight: 0.5
