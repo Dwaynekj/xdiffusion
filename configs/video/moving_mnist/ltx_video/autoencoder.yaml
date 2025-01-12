@@ -39,6 +39,7 @@ vae_config:
         use_reconstruction_gan: True
         wavelet_loss_weight: 0.5
         rec_loss: "l2"
+        learned_logvar: False
 
 # Describes the dataset used in training.
 data:

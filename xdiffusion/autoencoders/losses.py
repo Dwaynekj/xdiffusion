@@ -31,6 +31,7 @@ class LPIPSWithDiscriminator(nn.Module):
         use_reconstruction_gan=False,
         wavelet_loss_weight=0.0,
         rec_loss="l1",
+        learned_logvar=True,
     ):
 
         super().__init__()
@@ -39,8 +40,11 @@ class LPIPSWithDiscriminator(nn.Module):
         self.pixel_weight = pixelloss_weight
         self.perceptual_loss = LPIPS().eval()
         self.perceptual_weight = perceptual_weight
+        self.learned_logvar = learned_logvar
+
         # output log variance
-        self.logvar = nn.Parameter(torch.ones(size=()) * logvar_init)
+        if learned_logvar:
+            self.logvar = nn.Parameter(torch.ones(size=()) * logvar_init)
 
         if use_reconstruction_gan:
             self.discriminator = (
@@ -135,7 +139,8 @@ class LPIPSWithDiscriminator(nn.Module):
         else:
             w_loss = 0.0
 
-        nll_loss = rec_loss / torch.exp(self.logvar) + self.logvar
+        logvar = self.logvar if self.learned_logvar else posteriors.logvar
+        nll_loss = rec_loss / torch.exp(logvar) + logvar
         weighted_nll_loss = nll_loss
         if weights is not None:
             weighted_nll_loss = weights * nll_loss
@@ -192,7 +197,7 @@ class LPIPSWithDiscriminator(nn.Module):
 
             log = {
                 "{}/total_loss".format(split): loss.clone().detach().mean().item(),
-                "{}/logvar".format(split): self.logvar.detach().item(),
+                "{}/logvar".format(split): logvar.detach().item(),
                 "{}/kl_loss".format(split): kl_loss.detach().mean().item(),
                 "{}/nll_loss".format(split): nll_loss.detach().mean().item(),
                 "{}/rec_loss".format(split): rec_loss.detach().mean().item(),
