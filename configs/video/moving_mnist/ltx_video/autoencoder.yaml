@@ -44,7 +44,7 @@ vae_config:
 # Describes the dataset used in training.
 data:
   # Spatial width/height of the data input to the model.
-  image_size: 32
+  image_size: 64
   # Number of channels in the input data
   num_channels: 1
   # The number of classes in the dataset

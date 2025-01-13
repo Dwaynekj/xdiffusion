@@ -17,7 +17,12 @@ from xdiffusion.autoencoders.base import VariationalAutoEncoder
 from xdiffusion.autoencoders.distributions import DiagonalGaussianDistribution
 from xdiffusion.layers.attention_diffusers import Attention
 from xdiffusion.layers.embedding import PixArtAlphaCombinedTimestepSizeEmbeddings
-from xdiffusion.utils import DotConfig, instantiate_from_config
+from xdiffusion.utils import (
+    DotConfig,
+    instantiate_from_config,
+    normalize_to_neg_one_to_one,
+    unnormalize_to_zero_to_one,
+)
 
 # VAE Configuration compatible with HF checkpoints released by LTX
 LTX_VAE_CONFIG_ORIGINAL = {
@@ -133,7 +138,10 @@ class CausalVideoAutoencoder(torch.nn.Module, VariationalAutoEncoder):
         self.loss = instantiate_from_config(config.loss_config._cfg)
 
     def encode(self, x):
-        h = self.encoder(x)
+        """
+        Input comes in at (B,C,F,H,W) in the range (0,1)
+        """
+        h = self.encoder(normalize_to_neg_one_to_one(x))
         moments = self.quant_conv(h)
         posterior = DiagonalGaussianDistribution(moments)
         return posterior
@@ -141,10 +149,14 @@ class CausalVideoAutoencoder(torch.nn.Module, VariationalAutoEncoder):
     def decode(self, z):
         z = self.post_quant_conv(z)
         dec = self.decoder(z)
-        return dec
+
+        # Output needs to leave back into the range (0,1)
+        return unnormalize_to_zero_to_one(dec)
 
     def encode_to_latents(self, x: torch.Tensor) -> torch.Tensor:
-        """Encode images into latents."""
+        """Encode images into latents.
+        Input comes in at (B,C,F,H,W) in the range (0,1)
+        """
         encoder_posterior = self.encode(x)
         z = encoder_posterior.sample().detach()
         return z
