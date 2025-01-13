@@ -139,7 +139,14 @@ class LPIPSWithDiscriminator(nn.Module):
         else:
             w_loss = 0.0
 
-        logvar = self.logvar if self.learned_logvar else posteriors.logvar
+        if self.learned_logvar:
+            logvar = self.logvar
+        else:
+            logvar = torch.mean(posteriors.logvar, dim=-1, keepdim=True)
+            logvar = torch.mean(logvar, dim=-2, keepdim=True)
+            logvar = torch.mean(logvar, dim=-3, keepdim=True)
+            logvar = torch.mean(logvar, dim=-4, keepdim=True)
+
         nll_loss = rec_loss / torch.exp(logvar) + logvar
         weighted_nll_loss = nll_loss
         if weights is not None:
@@ -197,7 +204,7 @@ class LPIPSWithDiscriminator(nn.Module):
 
             log = {
                 "{}/total_loss".format(split): loss.clone().detach().mean().item(),
-                "{}/logvar".format(split): logvar.detach().item(),
+                "{}/logvar".format(split): logvar.detach().mean().item(),
                 "{}/kl_loss".format(split): kl_loss.detach().mean().item(),
                 "{}/nll_loss".format(split): nll_loss.detach().mean().item(),
                 "{}/rec_loss".format(split): rec_loss.detach().mean().item(),
