@@ -165,7 +165,7 @@ class CausalVideoAutoencoder(torch.nn.Module, VariationalAutoEncoder):
         """Decodes latents into images."""
         return self.decode(z)
 
-    def forward(self, input, sample_posterior=True, inject_noise=False):
+    def _forward(self, input, sample_posterior=True, inject_noise=False):
         posterior = self.encode(input)
         if sample_posterior:
             z = posterior.sample()
@@ -188,11 +188,11 @@ class CausalVideoAutoencoder(torch.nn.Module, VariationalAutoEncoder):
         dec = self.decode(z)
         return dec, posterior
 
-    def training_step(self, batch, batch_idx, optimizer_idx, global_step):
+    def forward(self, batch, batch_idx, optimizer_idx, global_step):
         inputs = batch
 
         # Inject noise during training to learn a denoising VAE decoder
-        reconstructions, posterior = self(inputs, inject_noise=True)
+        reconstructions, posterior = self._forward(inputs, inject_noise=True)
 
         if optimizer_idx == 0:
             # train encoder+decoder+logvar

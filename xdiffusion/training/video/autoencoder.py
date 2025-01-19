@@ -266,13 +266,11 @@ def train(
                 with accelerator.accumulate(vae):
                     for optimizer_idx, optimizer in enumerate(optimizers):
                         with accelerator.autocast():
-                            loss, reconstructions, posterior, log_dict_idx = (
-                                vae.training_step(
-                                    batch=videos,
-                                    batch_idx=-1,
-                                    optimizer_idx=optimizer_idx,
-                                    global_step=step,
-                                )
+                            loss, reconstructions, posterior, log_dict_idx = vae(
+                                batch=videos,
+                                batch_idx=-1,
+                                optimizer_idx=optimizer_idx,
+                                global_step=step,
                             )
                             if optimizer_idx == 0:
                                 optimizer_losses = loss
