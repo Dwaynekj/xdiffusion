@@ -220,11 +220,24 @@ def preprocess_training_videos(
 
     # If there is a frame masking strategy add the video masks as well
     if mask_generator is not None and not is_image_batch:
-        masks = mask_generator.get_masks(videos)
+        masks = mask_generator.get_masks(videos, config)
     else:
-        masks = torch.ones(
-            (videos.shape[0], videos.shape[2]), dtype=torch.bool, device=videos.device
-        )
+        # If there is a latent encoder, then use those shapes instead
+        if "latent_encoder" in config.diffusion.to_dict():
+            masks = torch.ones(
+                (
+                    videos.shape[0],
+                    config.diffusion.score_network.params.input_number_of_frames,
+                ),
+                dtype=torch.bool,
+                device=videos.device,
+            )
+        else:
+            masks = torch.ones(
+                (videos.shape[0], videos.shape[2]),
+                dtype=torch.bool,
+                device=videos.device,
+            )
     return videos, masks, context
 
 

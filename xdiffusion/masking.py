@@ -2,6 +2,9 @@ from abc import abstractmethod
 import math
 import random
 import torch
+from typing import Optional
+
+from xdiffusion.utils import DotConfig
 
 
 class MaskGenerator:
@@ -11,10 +14,29 @@ class MaskGenerator:
 
 
 class IdentityMaskGenerator(MaskGenerator):
-    def get_masks(self, x: torch.Tensor) -> torch.Tensor:
+    def get_masks(
+        self, x: torch.Tensor, config: Optional[DotConfig] = None
+    ) -> torch.Tensor:
         B, C, T, H, W = x.shape
 
-        masks = torch.ones((B, T), dtype=torch.bool, device=x.device)
+        if config is not None:
+            if "latent_encoder" in config.diffusion.to_dict():
+                masks = torch.ones(
+                    (
+                        B,
+                        config.diffusion.score_network.params.input_number_of_frames,
+                    ),
+                    dtype=torch.bool,
+                    device=x.device,
+                )
+            else:
+                masks = torch.ones(
+                    (B, T),
+                    dtype=torch.bool,
+                    device=x.device,
+                )
+        else:
+            masks = torch.ones((B, T), dtype=torch.bool, device=x.device)
         return masks
 
 

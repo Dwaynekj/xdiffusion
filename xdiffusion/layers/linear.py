@@ -2,8 +2,9 @@ import math
 from functools import partial
 import torch
 import torch.nn as nn
+from typing import Optional
 
-from xdiffusion.layers.activation import Activation
+from xdiffusion.layers.activation import Activation, GEGLU, GELU, ApproximateGELU
 
 
 def get_initializer(name, activation=None):
@@ -102,3 +103,66 @@ class TransposedLinear(nn.Module):
             -1, *[1] * num_axis
         )
         return y
+
+
+class FeedForward(nn.Module):
+    r"""
+    A feed-forward layer.
+
+    Parameters:
+        dim (`int`): The number of channels in the input.
+        dim_out (`int`, *optional*): The number of channels in the output. If not given, defaults to `dim`.
+        mult (`int`, *optional*, defaults to 4): The multiplier to use for the hidden dimension.
+        dropout (`float`, *optional*, defaults to 0.0): The dropout probability to use.
+        activation_fn (`str`, *optional*, defaults to `"geglu"`): Activation function to be used in feed-forward.
+        final_dropout (`bool` *optional*, defaults to False): Apply a final dropout.
+        bias (`bool`, defaults to True): Whether to use a bias in the linear layer.
+    """
+
+    def __init__(
+        self,
+        dim: int,
+        dim_out: Optional[int] = None,
+        mult: int = 4,
+        dropout: float = 0.0,
+        activation_fn: str = "geglu",
+        final_dropout: bool = False,
+        inner_dim=None,
+        bias: bool = True,
+    ):
+        super().__init__()
+        if inner_dim is None:
+            inner_dim = int(dim * mult)
+        dim_out = dim_out if dim_out is not None else dim
+        linear_cls = nn.Linear
+
+        if activation_fn == "gelu":
+            act_fn = GELU(dim, inner_dim, bias=bias)
+        elif activation_fn == "gelu-approximate":
+            act_fn = GELU(dim, inner_dim, approximate="tanh", bias=bias)
+        elif activation_fn == "geglu":
+            act_fn = GEGLU(dim, inner_dim, bias=bias)
+        elif activation_fn == "geglu-approximate":
+            act_fn = ApproximateGELU(dim, inner_dim, bias=bias)
+        else:
+            raise ValueError(f"Unsupported activation function: {activation_fn}")
+
+        self.net = nn.ModuleList([])
+        # project in
+        self.net.append(act_fn)
+        # project dropout
+        self.net.append(nn.Dropout(dropout))
+        # project out
+        self.net.append(linear_cls(inner_dim, dim_out, bias=bias))
+        # FF as used in Vision Transformer, MLP-Mixer, etc. have a final dropout
+        if final_dropout:
+            self.net.append(nn.Dropout(dropout))
+
+    def forward(self, hidden_states: torch.Tensor, scale: float = 1.0) -> torch.Tensor:
+        compatible_cls = (GEGLU,)
+        for module in self.net:
+            if isinstance(module, compatible_cls):
+                hidden_states = module(hidden_states, scale)
+            else:
+                hidden_states = module(hidden_states)
+        return hidden_states

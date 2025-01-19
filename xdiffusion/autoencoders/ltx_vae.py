@@ -101,7 +101,7 @@ class CausalVideoAutoencoder(torch.nn.Module, VariationalAutoEncoder):
             dims=dims,
             in_channels=config.to_dict().get("in_channels", 3),
             out_channels=config.latent_channels,
-            blocks=config.to_dict().get("encoder_blocks", config.blocks),
+            blocks=config.encoder_blocks,
             patch_size=config.to_dict().get("patch_size", 1),
             latent_log_var=latent_log_var,
             norm_layer=config.to_dict().get("norm_layer", "group_norm"),
@@ -111,7 +111,7 @@ class CausalVideoAutoencoder(torch.nn.Module, VariationalAutoEncoder):
             dims=dims,
             in_channels=config.latent_channels,
             out_channels=config.to_dict().get("out_channels", 3),
-            blocks=config.to_dict().get("decoder_blocks", config.blocks),
+            blocks=config.decoder_blocks,
             patch_size=config.to_dict().get("patch_size", 1),
             norm_layer=config.to_dict().get("norm_layer", "group_norm"),
             causal=config.to_dict().get("causal_decoder", False),
@@ -121,10 +121,10 @@ class CausalVideoAutoencoder(torch.nn.Module, VariationalAutoEncoder):
         quant_dims = 2 if dims == 2 else 3
         if self.use_quant_conv:
             self.quant_conv = make_conv_nd(
-                quant_dims, 2 * latent_channels, 2 * latent_channels, 1
+                quant_dims, 2 * config.latent_channels, 2 * config.latent_channels, 1
             )
             self.post_quant_conv = make_conv_nd(
-                quant_dims, latent_channels, latent_channels, 1
+                quant_dims, config.latent_channels, config.latent_channels, 1
             )
         else:
             self.quant_conv = torch.nn.Identity()
@@ -165,18 +165,34 @@ class CausalVideoAutoencoder(torch.nn.Module, VariationalAutoEncoder):
         """Decodes latents into images."""
         return self.decode(z)
 
-    def forward(self, input, sample_posterior=True):
+    def forward(self, input, sample_posterior=True, inject_noise=False):
         posterior = self.encode(input)
         if sample_posterior:
             z = posterior.sample()
         else:
             z = posterior.mode()
+
+        if inject_noise:
+            # We are training this as a denoising decoder, to go from noisy
+            # latents to clean pixels. Inject a small amount of noise, corresponding
+            # to the typical last diffusion timestep. In general, with 1000 step
+            # diffusion training, the noise in the last step is on the order of
+            # eps = (1.0 / 1000.0) * torch.randn() = .001 * torch.randn().
+            # With 20 step diffusion, we are on the order of (1.0 / 20.0) * torch.randn()
+            # = .05 * torch.rand(). The LTX-Video suggested injecting noise in the
+            # range (0, 0.2), which seems aggressive but is presumably to reuse
+            # the VAE for more aggresive step sampling distillation. So let's try it here
+            # and see what happens.
+            noise = 0.2 * torch.rand(size=(1,), device=z.device) * torch.randn_like(z)
+            z = z + noise
         dec = self.decode(z)
         return dec, posterior
 
     def training_step(self, batch, batch_idx, optimizer_idx, global_step):
         inputs = batch
-        reconstructions, posterior = self(inputs)
+
+        # Inject noise during training to learn a denoising VAE decoder
+        reconstructions, posterior = self(inputs, inject_noise=True)
 
         if optimizer_idx == 0:
             # train encoder+decoder+logvar
@@ -455,7 +471,7 @@ class Decoder(torch.nn.Module):
 
         # Compute output channel to be product of all channel-multiplier blocks
         output_channel = base_channels
-        for block_name, block_params in list(reversed(blocks)):
+        for block_name, block_params in blocks:
             block_params = block_params if isinstance(block_params, dict) else {}
             if block_name == "res_x_y":
                 output_channel = output_channel * block_params.get("multiplier", 2)
@@ -474,7 +490,7 @@ class Decoder(torch.nn.Module):
 
         self.up_blocks = torch.nn.ModuleList([])
 
-        for block_name, block_params in list(reversed(blocks)):
+        for block_name, block_params in blocks:
             input_channel = output_channel
             if isinstance(block_params, int):
                 block_params = {"num_layers": block_params}

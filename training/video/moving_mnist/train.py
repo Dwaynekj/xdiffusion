@@ -37,6 +37,7 @@ def train(
     resume_from: str,
     sample_with_guidance: bool = False,
     joint_image_video_training_step: int = -1,
+    force_cpu: bool = False,
 ):
     global OUTPUT_NAME
     OUTPUT_NAME = f"{OUTPUT_NAME}/{str(Path(config_path).stem)}"
@@ -94,9 +95,11 @@ def train(
     diffusion_model.print_model_summary()
 
     # The accelerate library will handle of the GPU device management for us.
+    accelerator_force_cpu = True if force_cpu else None
     accelerator = Accelerator(
         dataloader_config=DataLoaderConfiguration(split_batches=False),
         mixed_precision="no",
+        cpu=accelerator_force_cpu,
     )
 
     # Prepare the dataset with the accelerator. This makes sure all of the
@@ -379,9 +382,6 @@ def sample(
             config.data.image_size,
         )
 
-        context["x0"] = normalize_to_neg_one_to_one(
-            torch.zeros(size=(B, C, F, H, W), dtype=torch.float32, device=device)
-        )
         context["frame_indices"] = torch.tile(
             torch.arange(end=F, device=device)[None, ...],
             (B, 1),
@@ -392,7 +392,33 @@ def sample(
         context["latent_mask"] = torch.ones(
             size=(B, C, F, 1, 1), dtype=torch.float32, device=device
         )
-        context["video_mask"] = torch.ones(size=(B, F), dtype=torch.bool, device=device)
+
+        if "latent_encoder" in config.diffusion.to_dict():
+            context["x0"] = normalize_to_neg_one_to_one(
+                torch.zeros(
+                    size=(
+                        B,
+                        config.diffusion.score_network.params.input_channels,
+                        config.diffusion.score_network.params.input_number_of_frames,
+                        config.diffusion.score_network.params.input_spatial_size,
+                        config.diffusion.score_network.params.input_spatial_size,
+                    ),
+                    dtype=torch.float32,
+                    device=device,
+                )
+            )
+            context["video_mask"] = torch.ones(
+                size=(B, config.diffusion.score_network.params.input_number_of_frames),
+                dtype=torch.bool,
+                device=device,
+            )
+        else:
+            context["x0"] = normalize_to_neg_one_to_one(
+                torch.zeros(size=(B, C, F, H, W), dtype=torch.float32, device=device)
+            )
+            context["video_mask"] = torch.ones(
+                size=(B, F), dtype=torch.bool, device=device
+            )
 
         samples, intermediate_stage_output = diffusion_model.sample(
             num_samples=num_samples, context=context
@@ -539,6 +565,7 @@ def main(override=None):
     parser.add_argument("--load_model_weights_from_checkpoint", type=str, default="")
     parser.add_argument("--resume_from", type=str, default="")
     parser.add_argument("--joint_image_video_training_step", type=int, default=-1)
+    parser.add_argument("--force_cpu", action="store_true")
     args = parser.parse_args()
 
     train(
@@ -549,6 +576,7 @@ def main(override=None):
         load_model_weights_from_checkpoint=args.load_model_weights_from_checkpoint,
         resume_from=args.resume_from,
         joint_image_video_training_step=args.joint_image_video_training_step,
+        force_cpu=args.force_cpu,
     )
 
 

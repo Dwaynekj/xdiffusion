@@ -11,8 +11,8 @@ diffusion:
   # from the model, and defines the sampling method used
   sampling:
     output_channels: 1
-    output_spatial_size: 32
-    output_frames: 16
+    output_spatial_size: 64
+    output_frames: 25
     target: xdiffusion.samplers.rectified_flow.AncestralSampler
     params: {}
 
@@ -70,40 +70,114 @@ diffusion:
     enable: False
     p: 0.99
     c: 1.7
-  # Defines the score network for predicting the noise parameter
-  score_network:
-    target: xdiffusion.score_networks.sora.Sora
+
+  # The latent encoder for converting from pixel space to latent space
+  latent_encoder:
+    target: xdiffusion.autoencoders.ltx_vae.CausalVideoAutoencoder
+    instantiate_with_config_struct: True
     params:
-      input_spatial_size: 32
+      dims: 3
+      in_channels: 1
+      out_channels: 1
+      latent_channels: 128
+      encoder_blocks: [
+          ["res_x", 4],
+          ["compress_all", 1],
+          ["res_x_y", 1],
+          ["res_x", 3],
+          ["compress_all", 1],
+          ["res_x_y", 1],
+          ["res_x", 3],
+          ["compress_all", 1],
+          ["res_x", 3],
+          ["res_x", 4],
+      ]
+      decoder_blocks: [
+          ["res_x", 4],
+          ["res_x", 3],
+          ["compress_all", 1],
+          ["res_x", 3],
+          ["res_x_y", 1],
+          ["compress_all", 1],
+          ["res_x", 3],
+          ["res_x_y", 1],
+          ["compress_all", 1],
+          ["res_x", 4],
+      ]
+      scaling_factor: 1.0
+      norm_layer: "pixel_norm"
+      patch_size: 4
+      latent_log_var: "uniform"
+      use_quant_conv: False
+      causal_decoder: False
+
+      loss_config:
+        target: xdiffusion.autoencoders.losses.LPIPSWithDiscriminator
+        params:
+          disc_start: 10000
+          kl_weight: 1.0e-06
+          perceptual_weight: 0.5
+          disc_weight: 0.5
+          disc_in_channels: 1
+          disc_conditional: false
+          use_3d: True
+          use_reconstruction_gan: True
+          wavelet_loss_weight: 0.5
+          rec_loss: "l2"
+          learned_logvar: False
+
+  # Defines the score network for predicting the noise parameter. This score
+  # network accepts latent space input of shape (B,128,4,2,2).
+  score_network:
+    target: xdiffusion.score_networks.ltx_video.LTXVideoTransformer
+    params:
+      # Spatial resolution of the input
+      input_spatial_size: 2
       # Model input channels
-      input_channels: 1
+      input_channels: 128
       # Model input number of frames
-      input_number_of_frames: 16
+      input_number_of_frames: 4
+      # True if we are learning the variance in addition
+      # to the noise prediction.
       is_learned_sigma: False
+      # True if we are class conditional.
       is_class_conditional: False
-      input_size: [16, 32, 32]
-      input_sq_size: 32
-      patch_size: [1, 4, 4]
-      hidden_size: 368
-      depth: 12
-      num_heads: 16
-      mlp_ratio: 4.0
-      class_dropout_prob: 0.1
-      pred_sigma: False
-      # Dropout ratio
-      drop_path: 0.0
-      # Number of channels in the text embeddings
+      # Model output channels
+      out_channels: 128
+      # The number of layers in the transformer
+      num_layers: 12
+      # Activation function used in the transformer blocks.
+      activation_fn: "gelu-approximate"
+      # Main attention settings. Yields an inner dimension
+      # of 64*12 = 768
+      attention_bias: True
+      attention_head_dim: 64
+      num_attention_heads: 12
+      attention_type: "default"
+      # The dimension of the cross attention projection.
+      # Must match the dimension of the attention heads.
+      cross_attention_dim: 768
+      # We are using the T5-Base model, which outputs 768 channels.
       caption_channels: 768
-      # Maximum number of tokens in the text embeddings
-      model_max_length: 77
-      qk_norm: True
-      enable_flash_attn: False
-      enable_layernorm_kernel: False
-      only_train_temporal: False
-      # Freeze the caption projection. Useful for adapting from a pretrained
-      # model.
-      freeze_y_embedder: False
-      skip_y_embedder: False
+
+      double_self_attention: False
+      dropout: 0.0
+      norm_elementwise_affine: False
+      norm_eps: 1.0e-06
+      norm_num_groups: 32
+      num_embeds_ada_norm: 1000
+      num_vector_embeds: None
+      only_cross_attention: False
+      project_to_2d_pos: True
+      upcast_attention: False
+      use_linear_projection: False
+      qk_norm: "rms_norm"
+      standardization_norm: "rms_norm"
+      positional_embedding_type: "rope"
+      positional_embedding_theta: 10000.0
+      positional_embedding_max_pos: [20, 2048, 2048]
+      timestep_scale_multiplier: 1000
+      adaptive_norm: "single_scale_shift"
 
       # Additional conditioning signals for the model. The projections
       # defined here will be applied before running through the rest of the
@@ -119,17 +193,18 @@ diffusion:
           # Timestep -> timestep embedding
           - target: torch.nn.Identity
             params: {}
+
 # Describes the dataset used in training.
 data:
   # Spatial width/height of the data input to the model.
-  image_size: 32
+  image_size: 64
   # Number of channels in the input data
   num_channels: 1
   # The number of classes in the dataset
   num_classes: 10
   # The number of frames in the input dataset. This could be different
   # than the number of frames that is in the data itself.
-  input_number_of_frames: 16
+  input_number_of_frames: 25
   # Method of processing the input frames. Can be "clip", which takes
   # the first N frames, or "sample", which skips frames from the input
   # to get the required number of frames (so a source video of 30 frames, with input_number_of_frames
@@ -139,32 +214,7 @@ data:
 # Describes training parameters, including sampling
 # strategies for input data.
 training:
-  # Use the batch training methodology from Flexible Diffusion Modeling
-  # to train a joint conditional model of random frame/conditioning sets.
-  flexible_diffusion_modeling: False
-  # The masking strategy, can be "random" or "uniform".
-  flexible_diffusion_modeling_method: "random"
-  # Frame masking strategy, if not using FDM.
-  mask_ratios:
-    # Mask random number of frames in random positions.
-    random: 0.05
-    # Mask every other frame, starting randomly on the first or
-    # second frame.
-    interpolate: 0.005
-    # Mask up to 1/4 contiguous frames starting in a random position.
-    quarter_random: 0.005
-    # Mask up to 1/4 contiguous frames starting at the beginning of the video.
-    quarter_head: 0.005
-    # Mask up to 1/4 contiguous frames starting at the end of the video
-    quarter_tail: 0.005
-    # Mask up to 1/4 contiguous frames, from both the beginning and the end,
-    # independently.
-    quarter_head_tail: 0.005
-    # Mask a single frame, in a random position.
-    image_random: 0.025
-    # Mask a single frame, at the beginning of the video.
-    image_head: 0.05
-    # Mask a single frame, at the end of the video.
-    image_tail: 0.025
-    # Mask a single frame, at both the beginning and the end of the video.
-    image_head_tail: 0.025
+  dataset: "video/moving_mnist"
+  batch_size: 8
+  gradient_accumulation_steps: 1
+  mixed_precision: "bf16"

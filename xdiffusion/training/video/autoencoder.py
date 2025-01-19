@@ -2,12 +2,14 @@ from accelerate import cpu_offload, Accelerator, DataLoaderConfiguration
 from accelerate.utils import GradientAccumulationPlugin
 from accelerate import DistributedDataParallelKwargs
 import argparse
+from datetime import datetime
 import math
 import os
 from pathlib import Path
 import torch
 from torch.optim import Adam
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from torchinfo import summary
 from torchvision import transforms, utils
 from torchvision.datasets import MNIST
@@ -84,6 +86,14 @@ def train(
 
     # Ensure the output directories exist
     os.makedirs(OUTPUT_NAME, exist_ok=True)
+
+    # Create the tensorboard summary to log the training progress.
+    tensorboard_writer = SummaryWriter(
+        os.path.join(
+            os.path.join(OUTPUT_NAME, "tensorboard"),
+            datetime.now().strftime("%Y%m%d%H%M%S"),
+        )
+    )
 
     # Check to see if we are using gradient accumulation
     gradient_accumulation_steps = 1
@@ -301,6 +311,22 @@ def train(
                 f"loss: {[f'{val:.4f}' for idx, val in enumerate(current_loss)]} avg_loss: {[f'{val:.4f}' for idx, val in enumerate(average_losses)]} KL: {posterior.kl().detach().mean():.4f} posterior_mean: {average_posterior_mean:.4f} posterior_std: {average_posterior_std:.4f}"
             )
 
+            # Log all of the metrics to tensorboard
+            assert len(current_loss) == 2
+            tensorboard_writer.add_scalar("g_loss", current_loss[0], step)
+            tensorboard_writer.add_scalar("g_avg_loss", average_losses[0], step)
+            tensorboard_writer.add_scalar("d_loss", current_loss[1], step)
+            tensorboard_writer.add_scalar("d_avg_loss", average_losses[1], step)
+            tensorboard_writer.add_scalar("KL", posterior.kl().detach().mean(), step)
+            tensorboard_writer.add_scalar(
+                "Posterior Mean", posterior.mean.detach().mean(), step
+            )
+            tensorboard_writer.add_scalar(
+                "Posterior Std", posterior.std.detach().mean(), step
+            )
+            for k, v in log_dict:
+                tensorboard_writer.add_scalar(k, v, step)
+
             if step % LOG_TRAINING_WEIGHTS == 0:
                 accelerator.print(log_dict)
 
@@ -342,6 +368,21 @@ def train(
                     str(f"{OUTPUT_NAME}/reconstructions-{step}.gif"),
                 )
 
+                # Save the images/videos to tensorbard as well
+                tensorboard_writer.add_image(
+                    f"original-{step}",
+                    utils.make_grid(
+                        videos[:, :, 0, :, :], nrow=int(math.sqrt(batch_size))
+                    ),
+                    step,
+                )
+                tensorboard_writer.add_image(
+                    f"reconstructions-{step}",
+                    utils.make_grid(
+                        reconstructions[:, :, 0, :, :], nrow=int(math.sqrt(batch_size))
+                    ),
+                    step,
+                )
                 # Save a corresponding model checkpoint.
                 if accelerator.is_main_process:
                     torch.save(

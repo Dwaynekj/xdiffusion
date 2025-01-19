@@ -206,7 +206,15 @@ def instantiate_from_config(config, use_config_struct: bool = False) -> Any:
     if use_config_struct:
         return get_obj_from_str(config["target"])(config["params"])
     else:
-        return get_obj_from_str(config["target"])(**config.get("params", dict()))
+        if "instantiate_with_config_struct" in config:
+            if config["instantiate_with_config_struct"]:
+                return get_obj_from_str(config["target"])(DotConfig(config["params"]))
+            else:
+                return get_obj_from_str(config["target"])(
+                    **config.get("params", dict())
+                )
+        else:
+            return get_obj_from_str(config["target"])(**config.get("params", dict()))
 
 
 def instantiate_partial_from_config(config, use_config_struct: bool = False) -> Any:

@@ -558,13 +558,22 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         output_spatial_size = [s[0], s[1]] if isinstance(s, list) else [s, s]
 
         if "output_frames" in self._config.diffusion.sampling.to_dict():
-            shape = (
-                num_samples,
-                self._config.diffusion.sampling.output_channels,
-                self._config.diffusion.sampling.output_frames,
-                output_spatial_size[0],
-                output_spatial_size[1],
-            )
+            if "latent_encoder" in self._config.diffusion.to_dict():
+                shape = (
+                    num_samples,
+                    self._config.diffusion.score_network.params.input_channels,
+                    self._config.diffusion.score_network.params.input_number_of_frames,
+                    self._config.diffusion.score_network.params.input_spatial_size,
+                    self._config.diffusion.score_network.params.input_spatial_size,
+                )
+            else:
+                shape = (
+                    num_samples,
+                    self._config.diffusion.sampling.output_channels,
+                    self._config.diffusion.sampling.output_frames,
+                    output_spatial_size[0],
+                    output_spatial_size[1],
+                )
         else:
             shape = (
                 num_samples,
@@ -629,8 +638,13 @@ class GaussianDiffusion_DDPM(DiffusionModel):
                 latents / self._latent_scale_factor
             )
 
-        # And denormalize the samples from the latent space
-        samples = self._unnormalize(latents)
+            if "normalize_latents" in self._config.diffusion.sampling.to_dict():
+                samples = self._unnormalize(latents)
+            else:
+                samples = latents
+        else:
+            # And denormalize the samples from the latent space
+            samples = self._unnormalize(latents)
         self.train()
         return samples, intermediate_outputs
 
