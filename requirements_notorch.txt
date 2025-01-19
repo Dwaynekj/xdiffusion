@@ -14,4 +14,5 @@ soundata==1.0.1
 soundfile==0.12.1
 librosa==0.10.2.post1
 msclap==1.3.3
+tensorboard==2.18.0
 torch-dwt @ git+https://github.com/KeKsBoTer/torch-dwt@master

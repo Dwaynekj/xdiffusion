@@ -20,7 +20,10 @@ class IdentityMaskGenerator(MaskGenerator):
         B, C, T, H, W = x.shape
 
         if config is not None:
-            if "latent_encoder" in config.diffusion.to_dict():
+            if (
+                "diffusion" in config.to_dict()
+                and "latent_encoder" in config.diffusion.to_dict()
+            ):
                 masks = torch.ones(
                     (
                         B,
