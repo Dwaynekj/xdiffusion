@@ -106,7 +106,8 @@ def train(
         if not mixed_precision:
             mixed_precision = "no"
 
-    ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
+    torch.autograd.set_detect_anomaly(True)
+    ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=False, broadcast_buffers=False)
 
     # The accelerate library will handle of the GPU device management for us.
     # Make sure to create it early so that we can gate some data loading on it.
@@ -317,12 +318,12 @@ def train(
             tensorboard_writer.add_scalar("d_avg_loss", average_losses[1], step)
             tensorboard_writer.add_scalar("KL", posterior.kl().detach().mean(), step)
             tensorboard_writer.add_scalar(
-                "Posterior Mean", posterior.mean.detach().mean(), step
+                "Posterior Mean", posterior.mean.detach().mean().to(torch.float32), step
             )
             tensorboard_writer.add_scalar(
-                "Posterior Std", posterior.std.detach().mean(), step
+                "Posterior Std", posterior.std.detach().mean().to(torch.float32), step
             )
-            for k, v in log_dict:
+            for k, v in log_dict.items():
                 tensorboard_writer.add_scalar(k, v, step)
 
             if step % LOG_TRAINING_WEIGHTS == 0:
