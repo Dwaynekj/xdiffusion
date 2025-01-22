@@ -146,9 +146,9 @@ class CausalVideoAutoencoder(torch.nn.Module, VariationalAutoEncoder):
         posterior = DiagonalGaussianDistribution(moments)
         return posterior
 
-    def decode(self, z):
+    def decode(self, z, timestep: Optional[bool] = None):
         z = self.post_quant_conv(z)
-        dec = self.decoder(z)
+        dec = self.decoder(z, timestep=timestep)
 
         # Output needs to leave back into the range (0,1)
         return unnormalize_to_zero_to_one(dec)
@@ -172,6 +172,7 @@ class CausalVideoAutoencoder(torch.nn.Module, VariationalAutoEncoder):
         else:
             z = posterior.mode()
 
+        timestep = None
         if inject_noise:
             # We are training this as a denoising decoder, to go from noisy
             # latents to clean pixels. Inject a small amount of noise, corresponding
@@ -183,16 +184,24 @@ class CausalVideoAutoencoder(torch.nn.Module, VariationalAutoEncoder):
             # range (0, 0.2), which seems aggressive but is presumably to reuse
             # the VAE for more aggresive step sampling distillation. So let's try it here
             # and see what happens.
-            noise = 0.2 * torch.rand(size=(1,), device=z.device) * torch.randn_like(z)
-            z = z + noise
-        dec = self.decode(z)
+            timestep = 0.2 * torch.rand(size=(z.shape[0], 1, 1, 1, 1), device=z.device)
+            epsilon = torch.randn_like(z)
+            z = z + timestep * epsilon
+        dec = self.decode(z, timestep=timestep)
         return dec, posterior
 
-    def forward(self, batch, batch_idx=-1, optimizer_idx=-1, global_step=-1):
+    def forward(
+        self,
+        batch,
+        batch_idx=-1,
+        optimizer_idx=-1,
+        global_step=-1,
+        inject_noise: bool = True,
+    ):
         inputs = batch
 
         # Inject noise during training to learn a denoising VAE decoder
-        reconstructions, posterior = self._forward(inputs, inject_noise=True)
+        reconstructions, posterior = self._forward(inputs, inject_noise=inject_noise)
 
         if optimizer_idx == -1:
             return reconstructions, posterior

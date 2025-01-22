@@ -368,14 +368,14 @@ def train(
 
                 # Save the images/videos to tensorbard as well
                 tensorboard_writer.add_image(
-                    f"original-{step}",
+                    f"samples/original-{step}",
                     utils.make_grid(
                         videos[:, :, 0, :, :], nrow=int(math.sqrt(batch_size))
                     ),
                     step,
                 )
                 tensorboard_writer.add_image(
-                    f"reconstructions-{step}",
+                    f"samples/reconstructions-{step}",
                     utils.make_grid(
                         reconstructions[:, :, 0, :, :], nrow=int(math.sqrt(batch_size))
                     ),

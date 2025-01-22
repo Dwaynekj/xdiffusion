@@ -37,6 +37,7 @@ vae_config:
     latent_log_var: "uniform"
     use_quant_conv: False
     causal_decoder: False
+    timestep_conditioning: True
 
     loss_config:
       target: xdiffusion.autoencoders.losses.LPIPSWithDiscriminator
