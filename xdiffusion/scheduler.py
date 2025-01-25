@@ -623,7 +623,8 @@ class DiscreteRectifiedFlowNoiseScheduler(torch.nn.Module):
     def q_sample(self, x_start, t, noise=None) -> torch.Tensor:
         assert noise is not None
 
-        # t=1.0 should be noise, t=0.0 should be x_start.
+        # t=1.0 should be noise, t=0.0 should be x_start, but in rectified
+        # flow the order is reversed, so t=1 is no noise.
         t_expanded = broadcast_from_left(t, shape=x_start.shape)
         perturbed_data = t_expanded * x_start + (1.0 - t_expanded) * noise
         return perturbed_data

@@ -634,8 +634,12 @@ class GaussianDiffusion_DDPM(DiffusionModel):
 
         # Decode the samples from the latent space
         if self._latent_encoder is not None:
+            # TODO: Grab the exact last timestep. For now, assume that all of them
+            #       are really small. Rectified flow uses 1e-3, so let's use that here.
             latents = self._latent_encoder.decode_from_latents(
-                latents / self._latent_scale_factor
+                latents / self._latent_scale_factor,
+                timestep=torch.ones(size=(latents.shape[0],), device=latents.device)
+                * 1e-3,
             )
 
             if "normalize_latents" in self._config.diffusion.sampling.to_dict():
@@ -889,9 +893,16 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         if save_intermediate_outputs:
             intermediate_outputs.append(self._unnormalize(x_t))
 
+        initial_timestep = 0
+        if (
+            "sampling" in self._config.diffusion.to_dict()
+            and "initial_timestep" in self._config.diffusion.sampling.to_dict()
+        ):
+            initial_timestep = self._config.diffusion.sampling.initial_timestep
+
         sampler = sampler if sampler is not None else self._reverse_process_sampler
         for timestep_idx in tqdm(
-            reversed(range(0, num_sampling_steps)),
+            reversed(range(initial_timestep, num_sampling_steps)),
             desc="sampling loop time step",
             total=num_sampling_steps,
             leave=False,

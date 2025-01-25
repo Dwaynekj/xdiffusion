@@ -13,6 +13,9 @@ diffusion:
     output_channels: 1
     output_spatial_size: 64
     output_frames: 25
+    # Typically, the initial timestep is 0, but we save
+    # the last diffusion timestep for the VAE.
+    initial_timestep: 1
     target: xdiffusion.samplers.rectified_flow.AncestralSampler
     params: {}
 
@@ -110,6 +113,7 @@ diffusion:
       latent_log_var: "uniform"
       use_quant_conv: False
       causal_decoder: False
+      timestep_conditioning: True
 
       loss_config:
         target: xdiffusion.autoencoders.losses.LPIPSWithDiscriminator

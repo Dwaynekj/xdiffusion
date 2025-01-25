@@ -146,7 +146,7 @@ class CausalVideoAutoencoder(torch.nn.Module, VariationalAutoEncoder):
         posterior = DiagonalGaussianDistribution(moments)
         return posterior
 
-    def decode(self, z, timestep: Optional[bool] = None):
+    def decode(self, z, timestep: Optional[bool] = None, **kwargs):
         z = self.post_quant_conv(z)
         dec = self.decoder(z, timestep=timestep)
 
@@ -161,9 +161,11 @@ class CausalVideoAutoencoder(torch.nn.Module, VariationalAutoEncoder):
         z = encoder_posterior.sample().detach()
         return z
 
-    def decode_from_latents(self, z: torch.Tensor) -> torch.Tensor:
+    def decode_from_latents(
+        self, z: torch.Tensor, timestep: Optional[bool] = None, **kwargs
+    ) -> torch.Tensor:
         """Decodes latents into images."""
-        return self.decode(z)
+        return self.decode(z, timestep=timestep)
 
     def _forward(self, input, sample_posterior=True, inject_noise=False):
         posterior = self.encode(input)
