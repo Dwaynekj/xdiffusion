@@ -134,7 +134,10 @@ def train(
         )
 
         if load_vae_weights_from_checkpoint:
-            vae.load_checkpoint(load_model_weights_from_checkpoint)
+            ckpt = torch.load(load_vae_weights_from_checkpoint, map_location="cpu")[
+                "model_state_dict"
+            ]
+            vae.load_state_dict(ckpt, strict=True)
 
     # Create the diffusion model we are going to train, with a UNet
     # specifically for the MNIST dataset.
