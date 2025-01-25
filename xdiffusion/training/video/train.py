@@ -137,7 +137,17 @@ def train(
             ckpt = torch.load(load_vae_weights_from_checkpoint, map_location="cpu")[
                 "model_state_dict"
             ]
-            vae.load_state_dict(ckpt, strict=True)
+
+            # Remove "module." from the keys
+            keys = list(ckpt.keys())
+            sd = {}
+            for k in keys:
+                if k.startswith("module."):
+                    sd[k[7:]] = ckpt[k]
+                else:
+                    sd[k] = ckpt[k]
+
+            vae.load_state_dict(sd, strict=True)
 
     # Create the diffusion model we are going to train, with a UNet
     # specifically for the MNIST dataset.
@@ -408,6 +418,7 @@ def train(
             config,
             output_path=OUTPUT_NAME,
         )
+    accelerator.end_training()
 
 
 def sample(
