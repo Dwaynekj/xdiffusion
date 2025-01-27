@@ -152,21 +152,21 @@ def train(
     # Create the diffusion model we are going to train, with a UNet
     # specifically for the MNIST dataset.
     if "diffusion_cascade" in config:
-        diffusion_model = GaussianDiffusionCascade(config=config)
+        source_diffusion_model = GaussianDiffusionCascade(config=config)
     elif "target" in config:
-        diffusion_model = get_obj_from_str(config["target"])(config)
+        source_diffusion_model = get_obj_from_str(config["target"])(config)
     else:
-        diffusion_model = GaussianDiffusion_DDPM(config=config, vae=vae)
+        source_diffusion_model = GaussianDiffusion_DDPM(config=config, vae=vae)
 
     # Load the model weights if we have them
     if load_model_weights_from_checkpoint:
-        diffusion_model.load_checkpoint(load_model_weights_from_checkpoint)
+        source_diffusion_model.load_checkpoint(load_model_weights_from_checkpoint)
 
     if resume_from:
-        diffusion_model.load_checkpoint(resume_from)
+        source_diffusion_model.load_checkpoint(resume_from)
 
     # Build context to display the model summary.
-    diffusion_model.print_model_summary()
+    source_diffusion_model.print_model_summary()
 
     # Now load the dataset. Do it on the main process first in case we have to download
     # it.
@@ -193,7 +193,7 @@ def train(
     #  former. We left the hyperparameters to their standard values. We set the learning
     #  rate to 2 × 10−4 without any sweeping, and we lowered it to 2 × 10−5
     #  for the 256 × 256 images, which seemed unstable to train with the larger learning rate."
-    optimizers = diffusion_model.configure_optimizers(learning_rate=2e-4)
+    optimizers = source_diffusion_model.configure_optimizers(learning_rate=2e-4)
 
     # Load the optimizers if we have them from the checkpoint
     if resume_from:
@@ -203,23 +203,27 @@ def train(
             optimizers[i].load_state_dict(checkpoint["optimizer_state_dicts"][i])
 
     # Configure the learning rate schedule
-    learning_rate_schedules = diffusion_model.configure_learning_rate_schedule(
+    learning_rate_schedules = source_diffusion_model.configure_learning_rate_schedule(
         optimizers
     )
 
-    # Move everything to the accelerator together
+    # Move everything to the accelerator together. We are going to expand all of
+    # the layers of the diffusion model (if we are a cascade, otherwise its singular)
+    # as we send them to the accelerator.
     all_device_objects = accelerator.prepare(
-        diffusion_model,
         dataloader,
         validation_dataloader,
+        *source_diffusion_model.models(),
         *optimizers,
         *learning_rate_schedules,
     )
-    diffusion_model = all_device_objects[0]
-    dataloader = all_device_objects[1]
-    validation_dataloader = all_device_objects[2]
-    optimizers = all_device_objects[3 : 3 + len(optimizers)]
-    learning_rate_schedules = all_device_objects[3 + len(optimizers) :]
+
+    num_models = len(optimizers)
+    dataloader = all_device_objects[0]
+    validation_dataloader = all_device_objects[1]
+    diffusion_models = all_device_objects[2 : 2 + num_models]
+    optimizers = all_device_objects[2 + num_models : 2 + 2 * num_models]
+    learning_rate_schedules = all_device_objects[2 + 2 * num_models :]
     assert len(optimizers) == len(
         learning_rate_schedules
     ), "Optimizers and learning rate schedules are not the same length!"
@@ -230,7 +234,7 @@ def train(
 
     # Create a mask generation strategy for each model (if a cascade)
     mask_generators = []
-    for model in diffusion_model.models():
+    for model in diffusion_models:
         if "training" in model.config() and "mask_ratios" in model.config().training:
             mask_generators.append(
                 masking.OpenSoraMaskGenerator(
@@ -257,14 +261,17 @@ def train(
             do_compile = config.training.compile
     accelerator.print(f"Model compilation setting: {do_compile}")
     if do_compile:
-        diffusion_model = torch.compile(diffusion_model)
+        compiled_models = []
+        for model in diffusion_models:
+            compiled_models.append(torch.compile(model))
+        diffusion_models = compiled_models
 
     with tqdm(initial=step, total=num_training_steps) as progress_bar:
         # Perform gradient descent for the given number of training steps.
         while step < num_training_steps:
             # All of the gradient accumulation steps count as one training step.
             for _ in range(gradient_accumulation_steps):
-                with accelerator.accumulate(diffusion_model):
+                with accelerator.accumulate(diffusion_models):
                     # The dataset has videos and classes. Let's use the classes,
                     # and convert them into a fixed embedding space.
                     is_image_batch = (
@@ -291,7 +298,7 @@ def train(
                         mask_generator,
                     ) in enumerate(
                         zip(
-                            diffusion_model.models(),
+                            diffusion_models,
                             optimizers,
                             learning_rate_schedules,
                             mask_generators,
@@ -332,7 +339,7 @@ def train(
 
                         # Calculate the loss on the batch of training data.
                         with accelerator.autocast():
-                            loss_dict = model_for_layer.loss_on_batch(
+                            loss_dict = model_for_layer(
                                 images=videos_for_layer,
                                 context=context_for_layer,
                                 stage_idx=stage_idx,
@@ -371,7 +378,7 @@ def train(
             # diffusion model to see how well its doing.
             if step % save_and_sample_every_n == 0:
                 sample(
-                    diffusion_model=diffusion_model,
+                    diffusion_model=source_diffusion_model,
                     step=step,
                     config=config,
                     num_samples=num_samples,
@@ -382,7 +389,7 @@ def train(
                 )
                 if accelerator.is_main_process:
                     save(
-                        accelerator.unwrap_model(diffusion_model),
+                        accelerator.unwrap_model(source_diffusion_model),
                         step,
                         loss,
                         optimizers,
@@ -400,7 +407,7 @@ def train(
 
     # Save and sample the final step.
     sample(
-        diffusion_model=diffusion_model,
+        diffusion_model=source_diffusion_model,
         step=step,
         config=config,
         num_samples=num_samples,
@@ -411,7 +418,7 @@ def train(
     )
     if accelerator.is_main_process:
         save(
-            accelerator.unwrap_model(diffusion_model),
+            accelerator.unwrap_model(source_diffusion_model),
             step,
             loss,
             optimizers,
