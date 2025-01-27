@@ -376,6 +376,8 @@ def train(
             )
             average_loss_cumulative += stage_loss
 
+            tensorboard_writer.add_scalar("loss", stage_loss, step)
+
             # To help visualize training, periodically sample from the
             # diffusion model to see how well its doing.
             if step % save_and_sample_every_n == 0:
@@ -388,6 +390,7 @@ def train(
                     validation_dataloader=validation_dataloader,
                     output_path=OUTPUT_NAME,
                     convert_labels_to_prompts=convert_labels_to_prompts,
+                    tensorboard_writer=tensorboard_writer,
                 )
                 if accelerator.is_main_process:
                     save(
@@ -417,6 +420,7 @@ def train(
         validation_dataloader=validation_dataloader,
         output_path=OUTPUT_NAME,
         convert_labels_to_prompts=convert_labels_to_prompts,
+        tensorboard_writer=tensorboard_writer,
     )
     if accelerator.is_main_process:
         save(
@@ -439,6 +443,7 @@ def sample(
     convert_labels_to_prompts: Callable[[torch.Tensor], List[str]],
     num_samples=64,
     sample_with_guidance: bool = False,
+    tensorboard_writer=None,
 ):
     device = next(diffusion_model.parameters()).device
 
@@ -571,6 +576,15 @@ def sample(
             samples,
             str(f"{output_path}/sample-{step}.gif"),
         )
+
+        if tensorboard_writer is not None:
+            tensorboard_writer.add_image(
+                f"samples/first_frame-{step}",
+                torchvision_utils.make_grid(
+                    samples[:, :, 0, :, :], nrow=int(math.sqrt(num_samples))
+                ),
+                step,
+            )
 
         # Save the intermedidate stages if they exist
         if intermediate_stage_output is not None:
