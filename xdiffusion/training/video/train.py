@@ -234,7 +234,7 @@ def train(
 
     # Create a mask generation strategy for each model (if a cascade)
     mask_generators = []
-    for model in diffusion_models:
+    for model in source_diffusion_model.models():
         if "training" in model.config() and "mask_ratios" in model.config().training:
             mask_generators.append(
                 masking.OpenSoraMaskGenerator(
