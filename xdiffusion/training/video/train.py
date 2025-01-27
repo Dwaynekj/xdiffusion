@@ -306,7 +306,9 @@ def train(
                     ):
                         # Is this a super resolution model? If it is, then generate
                         # the low resolution imagery as conditioning.
-                        config_for_layer = accelerator.unwrap(model_for_layer).config()
+                        config_for_layer = accelerator.unwrap_model(
+                            model_for_layer
+                        ).config()
                         context_for_layer = context.copy()
 
                         # Preprocess the training videos (e.g. clip or skip frames to match the setup)
