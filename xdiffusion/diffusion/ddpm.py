@@ -162,13 +162,10 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         device = images.device
         context = context.copy()
 
-        # The images are normalized into the range (-1, 1),
-        # from Section 3.3:
-        # "We assume that image data consists of integers in {0, 1, . . . , 255} scaled linearly to [−1, 1]."
-        x_0 = self._normalize(images)
-
         # Encode the normalized images into latents to send to the score network
         if self._latent_encoder is not None:
+            # The latent encoder assumes pixels are coming in [0,1]
+            x_0 = images
             z_0 = self._latent_encoder.encode_to_latents(x_0)
 
             if self._latent_scale_factor == -1.0:
@@ -181,6 +178,10 @@ class GaussianDiffusion_DDPM(DiffusionModel):
             # Scale the latents
             z_0 = z_0 * self._latent_scale_factor
         else:
+            # The images are normalized into the range (-1, 1),
+            # from Section 3.3:
+            # "We assume that image data consists of integers in {0, 1, . . . , 255} scaled linearly to [−1, 1]."
+            x_0 = self._normalize(images)
             z_0 = x_0
 
         # Line 3, calculate the random timesteps for the training batch.
@@ -642,7 +643,10 @@ class GaussianDiffusion_DDPM(DiffusionModel):
                 * 1e-3,
             )
 
-            if "normalize_latents" in self._config.diffusion.sampling.to_dict():
+            if (
+                "normalize_latents" in self._config.diffusion.sampling.to_dict()
+                and self._config.diffusion.sampling.normalize_latents
+            ):
                 samples = self._unnormalize(latents)
             else:
                 samples = latents

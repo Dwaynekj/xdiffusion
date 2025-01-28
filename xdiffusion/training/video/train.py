@@ -394,7 +394,7 @@ def train(
                 )
                 if accelerator.is_main_process:
                     save(
-                        accelerator.unwrap_model(source_diffusion_model),
+                        source_diffusion_model,
                         step,
                         loss,
                         optimizers,
@@ -424,7 +424,7 @@ def train(
     )
     if accelerator.is_main_process:
         save(
-            accelerator.unwrap_model(source_diffusion_model),
+            source_diffusion_model,
             step,
             loss,
             optimizers,

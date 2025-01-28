@@ -59,7 +59,7 @@ class AutoencoderKL(torch.nn.Module, VariationalAutoEncoder):
         z = encoder_posterior.sample().detach()
         return z
 
-    def decode_from_latents(self, z: torch.Tensor) -> torch.Tensor:
+    def decode_from_latents(self, z: torch.Tensor, **kwargs) -> torch.Tensor:
         """Decodes latents into images."""
         return self.decode(z)
 
