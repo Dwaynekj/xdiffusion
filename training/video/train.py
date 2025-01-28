@@ -8,10 +8,10 @@ def main(override=None):
     Main entrypoint for the standalone version of this package.
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument("--num_training_steps", type=int, default=100000)
+    parser.add_argument("--num_training_steps", type=int, default=20000)
     parser.add_argument("--batch_size", type=int, default=-1)
     parser.add_argument("--config_path", type=str, required=True)
-    parser.add_argument("--save_and_sample_every_n", type=int, default=10000)
+    parser.add_argument("--save_and_sample_every_n", type=int, default=1000)
     parser.add_argument("--load_model_weights_from_checkpoint", type=str, default="")
     parser.add_argument("--load_vae_weights_from_checkpoint", type=str, default="")
     parser.add_argument("--resume_from", type=str, default="")
