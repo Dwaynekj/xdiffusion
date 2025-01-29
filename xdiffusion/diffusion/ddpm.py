@@ -177,6 +177,16 @@ class GaussianDiffusion_DDPM(DiffusionModel):
 
             # Scale the latents
             z_0 = z_0 * self._latent_scale_factor
+
+            # If this is a video batch, but there is only a single frame, then
+            # this is considered a pseudo-image batch (for joint image/video training).
+            # In this case, need to trim the latent frames as well, as they might
+            # have been padded to support the single frame encoding.
+            if len(images.shape) == 5:
+                # (B,C,F,H,W)
+                if images.shape[2] == 1:
+                    # Trim the latents to also be a single frame.
+                    z_0 = z_0[:, :, :1, :, :]
         else:
             # The images are normalized into the range (-1, 1),
             # from Section 3.3:
@@ -206,7 +216,9 @@ class GaussianDiffusion_DDPM(DiffusionModel):
         # A zero is the mask means use x_0, otherwise use x_t
         if "video_mask" in context:
             # video_mask is (B,T)
-            x_t = torch.where(context["video_mask"][:, None, :, None, None], x_t, z_0)
+            x_t = torch.where(
+                context["video_mask"][:, None, : x_t.shape[2], None, None], x_t, z_0
+            )
 
         # Perform classifier free guidance over the context. This means
         # jointly train a conditional and unconditional model.

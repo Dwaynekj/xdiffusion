@@ -115,7 +115,7 @@ def sample_masks_for_training_batch(
 
 def get_training_batch(dataloader: DataLoader, is_image_batch: bool):
     source_videos, labels = next(dataloader)
-    if is_image_batch <= 0:
+    if not is_image_batch:
         # There is no joint training data, so just return the batch
         return source_videos, labels
 
@@ -124,7 +124,7 @@ def get_training_batch(dataloader: DataLoader, is_image_batch: bool):
     B, C, F, H, W = source_videos.shape
 
     # Now we need to pull items to fill out the training batch. In this case,
-    # the training batch will be batch size (B * F) with each entry a frame count of 1
+    # the training batch will be batch size (B * F) with each entry a frame count of 1.
     image_frames = []
     image_labels = []
     f = 0
@@ -214,9 +214,15 @@ def preprocess_training_videos(
     if is_image_batch:
         assert batch_size > 0
         # We need to clip the batch size of image batches to the max of
-        # (batch_size * config.data.input_number_of_frames)
-        if videos.shape[0] > batch_size * config.data.input_number_of_frames:
-            videos = videos[: batch_size * config.data.input_number_of_frames, ...]
+        # (batch_size * config.data.input_number_of_frames) or the number of input
+        # frames to the model (for latent diffusion models) if it exists.
+        num_frames = config.data.input_number_of_frames
+
+        if "input_number_of_frames" in config.diffusion.score_network.params.to_dict():
+            num_frames = config.diffusion.score_network.params.input_number_of_frames
+
+        if videos.shape[0] > batch_size * num_frames:
+            videos = videos[: batch_size * num_frames, ...]
 
     # If there is a frame masking strategy add the video masks as well
     if mask_generator is not None and not is_image_batch:

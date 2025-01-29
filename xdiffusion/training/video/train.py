@@ -152,9 +152,11 @@ def train(
     # Create the diffusion model we are going to train, with a UNet
     # specifically for the MNIST dataset.
     if "diffusion_cascade" in config:
-        source_diffusion_model = GaussianDiffusionCascade(config=config)
+        source_diffusion_model = GaussianDiffusionCascade(config=config, vae=vae)
     elif "target" in config:
-        source_diffusion_model = get_obj_from_str(config["target"])(config)
+        source_diffusion_model = get_obj_from_str(config["target"])(
+            config=config, vae=vae
+        )
     else:
         source_diffusion_model = GaussianDiffusion_DDPM(config=config, vae=vae)
 
@@ -278,6 +280,7 @@ def train(
                         joint_image_video_training_step > 1
                         and (step % joint_image_video_training_step) == 0
                     ) or joint_image_video_training_step == 1
+
                     source_videos, labels = get_training_batch(
                         dataloader,
                         is_image_batch=is_image_batch,

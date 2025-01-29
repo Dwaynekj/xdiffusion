@@ -93,6 +93,7 @@ class CausalVideoAutoencoder(torch.nn.Module, VariationalAutoEncoder):
             "latent_log_var", "per_channel" if double_z else "none"
         )
         self.use_quant_conv = config.to_dict().get("use_quant_conv", True)
+        self.input_number_of_frames = config.input_number_of_frames
 
         if self.use_quant_conv and latent_log_var == "uniform":
             raise ValueError("uniform latent_log_var requires use_quant_conv=False")
@@ -141,7 +142,18 @@ class CausalVideoAutoencoder(torch.nn.Module, VariationalAutoEncoder):
         """
         Input comes in at (B,C,F,H,W) in the range (0,1)
         """
-        h = self.encoder(normalize_to_neg_one_to_one(x))
+        # Pad the input to the number of frames we need for the model
+        if x.shape[2] < self.input_number_of_frames:
+            x = torch.tile(x, (1, 1, self.input_number_of_frames, 1, 1))
+
+        if x.shape[2] > self.input_number_of_frames:
+            x = x[:, :, : self.input_number_of_frames, :, :]
+
+        # Normalize the input
+        h = normalize_to_neg_one_to_one(x)
+
+        # Encode to latents
+        h = self.encoder(h)
         moments = self.quant_conv(h)
         posterior = DiagonalGaussianDistribution(moments)
         return posterior
@@ -174,6 +186,7 @@ class CausalVideoAutoencoder(torch.nn.Module, VariationalAutoEncoder):
         else:
             z = posterior.mode()
 
+        # TODO: Use zeros rather than None here.
         timestep = None
         if inject_noise:
             # We are training this as a denoising decoder, to go from noisy
