@@ -45,6 +45,7 @@ def train(
     mixed_precision: str = "",
     use_lora_training: bool = False,
     compile: Optional[bool] = None,
+    force_cpu: bool = False,
 ):
     """Trains an image diffusion model from a config file.
 
@@ -101,6 +102,7 @@ def train(
 
     # The accelerate library will handle of the GPU device management for us.
     # Make sure to create it early so that we can gate some data loading on it.
+    accelerator_force_cpu = True if force_cpu else None
     accelerator = Accelerator(
         dataloader_config=DataLoaderConfiguration(split_batches=False),
         mixed_precision=mixed_precision,
@@ -115,6 +117,7 @@ def train(
         ),
         kwargs_handlers=[ddp_kwargs],
         step_scheduler_with_optimizer=False,
+        cpu=accelerator_force_cpu,
     )
     accelerator.print(
         f"Training with {gradient_accumulation_steps} gradient accumulation steps."

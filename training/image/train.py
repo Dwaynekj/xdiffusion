@@ -18,6 +18,7 @@ def main(override=None):
     parser.add_argument("--dataset_name", type=str, default="")
     parser.add_argument("--mixed_precision", type=str, default="")
     parser.add_argument("--use_lora_training", action="store_true")
+    parser.add_argument("--force_cpu", action="store_true")
 
     args = parser.parse_args()
 
@@ -33,6 +34,7 @@ def main(override=None):
         dataset_name=args.dataset_name,
         mixed_precision=args.mixed_precision,
         use_lora_training=args.use_lora_training,
+        force_cpu=args.force_cpu,
     )
 
 

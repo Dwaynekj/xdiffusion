@@ -221,3 +221,4 @@ training:
   batch_size: 128
   gradient_accumulation_steps: 1
   mixed_precision: "bf16"
+  num_training_steps: 100000

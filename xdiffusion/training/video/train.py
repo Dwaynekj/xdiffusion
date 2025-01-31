@@ -74,6 +74,17 @@ def train(
                 "Batch size must be specified in the configuration file or on the command line with --batch_size"
             )
 
+    if "training" in config and "num_training_steps" in config.training:
+        if num_training_steps <= 0:
+            # Only override if this is not on the command line
+            num_training_steps = config.training.num_training_steps
+    else:
+        # If its not in the config file, make sure it was specified
+        if num_training_steps <= 0:
+            raise ValueError(
+                "The number of training steps (num_training_steps) must be specified on the command line or in the config file."
+            )
+
     OUTPUT_NAME = f"{output_path}/{dataset_name}/{str(Path(config_path).stem)}"
 
     # Ensure the output directories exist

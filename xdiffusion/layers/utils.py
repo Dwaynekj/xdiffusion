@@ -221,7 +221,6 @@ def get_2d_sincos_pos_embed_from_grid(embed_dim, grid):
     # use half of dimensions to encode grid_h
     emb_h = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[0])  # (H*W, D/2)
     emb_w = get_1d_sincos_pos_embed_from_grid(embed_dim // 2, grid[1])  # (H*W, D/2)
-
     emb = np.concatenate([emb_h, emb_w], axis=1)  # (H*W, D)
     return emb
 
@@ -238,10 +237,11 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
     omega = 1.0 / 10000**omega  # (D/2,)
 
     pos_shape = pos.shape
-
     pos = pos.reshape(-1)
     out = np.einsum("m,d->md", pos, omega)  # (M, D/2), outer product
-    out = out.reshape([*pos_shape, -1])[0]
+
+    # NOTE: SD3 cropped positional embeddings used this shape, but its not necessary
+    # out = out.reshape([*pos_shape, -1])[0]
 
     emb_sin = np.sin(out)  # (M, D/2)
     emb_cos = np.cos(out)  # (M, D/2)
