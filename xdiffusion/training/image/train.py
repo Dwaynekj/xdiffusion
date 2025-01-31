@@ -1,16 +1,16 @@
 from accelerate import cpu_offload, Accelerator, DataLoaderConfiguration
 from accelerate.utils import GradientAccumulationPlugin
 from accelerate import DistributedDataParallelKwargs
-import argparse
+from datetime import datetime
 import math
 import os
 from pathlib import Path
 import torch
 from torch.optim import Adam
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from torchinfo import summary
 from torchvision import transforms, utils
-from torchvision.datasets import MNIST
 from tqdm import tqdm
 from typing import Callable, List, Optional
 
@@ -86,6 +86,13 @@ def train(
 
     # Ensure the output directories exist
     os.makedirs(OUTPUT_NAME, exist_ok=True)
+
+    tensorboard_writer = SummaryWriter(
+        os.path.join(
+            os.path.join(OUTPUT_NAME, "tensorboard"),
+            datetime.now().strftime("%Y%m%d%H%M%S"),
+        )
+    )
 
     # Check to see if we are using gradient accumulation
     gradient_accumulation_steps = 1
@@ -376,6 +383,7 @@ def train(
                 f"loss: {stage_loss:.4f} avg_loss: {average_loss:.4f}"
             )
             average_loss_cumulative += stage_loss
+            tensorboard_writer.add_scalar("loss", stage_loss, step)
 
             # To help visualize training, periodically sample from the
             # diffusion model to see how well its doing.
@@ -391,6 +399,7 @@ def train(
                     validation_dataloader=validation_dataloader,
                     accelerator=accelerator,
                     prompt_encoder=prompt_encoder,
+                    tensorboard_writer=tensorboard_writer,
                 )
 
                 if accelerator.is_main_process:
@@ -429,6 +438,7 @@ def train(
         validation_dataloader=validation_dataloader,
         accelerator=accelerator,
         prompt_encoder=prompt_encoder,
+        tensorboard_writer=tensorboard_writer,
     )
     if accelerator.is_main_process:
         save(
@@ -454,6 +464,7 @@ def sample(
     num_samples=64,
     sample_with_guidance: bool = False,
     prompt_encoder: Optional[torch.nn.Module] = None,
+    tensorboard_writer=None,
 ):
     device = next(diffusion_model.parameters()).device
 
@@ -529,6 +540,13 @@ def sample(
                 str(f"{output_path}/sample-{step}.png"),
                 nrow=int(math.sqrt(num_samples)),
             )
+
+            if tensorboard_writer is not None:
+                tensorboard_writer.add_image(
+                    f"samples/sample-{step}",
+                    utils.make_grid(samples, nrow=int(math.sqrt(num_samples))),
+                    step,
+                )
 
             # Save the intermedidate stages if they exist
             if intermediate_stage_output is not None:
