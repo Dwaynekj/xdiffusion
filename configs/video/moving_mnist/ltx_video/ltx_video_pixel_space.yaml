@@ -12,7 +12,7 @@ diffusion:
   sampling:
     output_channels: 1
     output_spatial_size: 32
-    output_frames: 25
+    output_frames: 16
     # Typically, the initial timestep is 0, but we save
     # the last diffusion timestep for the VAE.
     initial_timestep: 1
@@ -80,7 +80,7 @@ diffusion:
       # Model input channels
       input_channels: 1
       # Model input number of frames
-      input_number_of_frames: 25
+      input_number_of_frames: 16
       # True if we are learning the variance in addition
       # to the noise prediction.
       is_learned_sigma: False
@@ -148,7 +148,7 @@ data:
   num_classes: 10
   # The number of frames in the input dataset. This could be different
   # than the number of frames that is in the data itself.
-  input_number_of_frames: 25
+  input_number_of_frames: 16
   # Method of processing the input frames. Can be "clip", which takes
   # the first N frames, or "sample", which skips frames from the input
   # to get the required number of frames (so a source video of 30 frames, with input_number_of_frames
