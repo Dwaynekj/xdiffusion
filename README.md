@@ -116,6 +116,7 @@ The following is a list of the supported video models, their current results, an
 | October 2024 | Movie-Gen | [Movie Gen: A Cast of Media Foundation Models](https://ai.meta.com/static-resource/movie-gen-research-paper) | | |
 | October 2024 | Pyramid Flow | [Pyramidal Flow Matching for Efficient Video Generative Modeling](https://arxiv.org/abs/2410.05954) | | |
 | October 2024 | T2V-Turbo-v2 | [T2V-Turbo-v2: Enhancing Video Generation Model Post-Training through Data, Reward, and Conditional Guidance Design](https://arxiv.org/abs/2410.05677) | | |
+| December 2024 | LTX Video | [LTX-Video: Realtime Video Latent Diffusion](https://arxiv.org/abs/2501.00103)| [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/video/moving_mnist/ltx_video/ltx_video.yaml)  | ![LTX Video](https://drive.google.com/uc?export=view&id=1zOCNPirEWQkL_REV6pNFdakkBVcnDBrB) | [instructions](https://github.com/swookey-thinky/xdiffusion/blob/main/docs/video/ltx_video.md)
 
 ## Audio Diffusion
 
