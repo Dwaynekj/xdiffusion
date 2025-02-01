@@ -1,0 +1,165 @@
+# SoRA: Video generation models as world simulators
+#
+# Configuration file for a SoRA-based text-to-video diffusion model. Since there
+# is no official SoRA code or paper, this model is based on what little information
+# we can glean from public sources. We use two
+# Imagen Video
+#
+diffusion:
+  parameterization: "rectified_flow"
+  # Sampling section determines the size of the sampled output
+  # from the model, and defines the sampling method used
+  sampling:
+    output_channels: 1
+    output_spatial_size: 32
+    output_frames: 25
+    # Typically, the initial timestep is 0, but we save
+    # the last diffusion timestep for the VAE.
+    initial_timestep: 1
+    target: xdiffusion.samplers.rectified_flow.AncestralSampler
+    params: {}
+
+  # The noise scheduler to use with the forward diffusion process.
+  noise_scheduler:
+    target: xdiffusion.scheduler.DiscreteRectifiedFlowNoiseScheduler
+    params:
+      # The number of noise scales
+      steps: 1000
+      # The maximum time
+      max_time: 1.0
+      # The distribution for sample times
+      distribution: "logit-normal"
+  sde:
+    target: xdiffusion.sde.rectified_flow.RectifiedFlow
+    params:
+      N: 1000
+      T: 1.0
+  # A preprocessor to use with the context before sending to the score network.
+  context_preprocessing:
+      # The Prompts Preprocessor converts the list of text prompts in the context
+      # into a batch of text tokens of shape (B, text_context_size)
+      - target: xdiffusion.layers.embedding.T5TextEmbedder
+        params:
+          # The max length of the text token sequence
+          max_length: 77
+          include_temporal: True
+          # The name of the T5 text model to use
+          version: "google/t5-v1_1-base"
+          context_key: "text_embeddings"
+  # A preprocessor for input to the model.
+  input_preprocessing:
+    target: xdiffusion.context.IgnoreInputPreprocessor
+    params: {}
+  # Setting for classifier free guidance.
+  classifier_free_guidance:
+    # Classifier-free guidance scale, where the value is >= 1.0
+    classifier_free_guidance: 1.0
+    # Unconditional guidance probability
+    unconditional_guidance_probability: 0.2
+    # The context signals to apply guidance to.
+    signals: ["text_prompts"]
+    # For classifier free guidance, we need the ability to create an unconditional
+    # context given the conditional context. This unconditional context needs
+    # to be applied in both training and sampling, and will return a new
+    # context dictionary given the original context dictionary.
+    unconditional_context:
+      target: xdiffusion.context.UnconditionalTextPromptsAdapter
+      params: {}
+  dynamic_thresholding:
+    enable: False
+    p: 0.99
+    c: 1.7
+
+  # Defines the score network for predicting the noise parameter. This score
+  # network accepts latent space input of shape (B,128,4,2,2).
+  score_network:
+    target: xdiffusion.score_networks.ltx_video.LTXVideoTransformer
+    params:
+      # Spatial resolution of the input
+      input_spatial_size: 32
+      # Model input channels
+      input_channels: 1
+      # Model input number of frames
+      input_number_of_frames: 25
+      # True if we are learning the variance in addition
+      # to the noise prediction.
+      is_learned_sigma: False
+      # True if we are class conditional.
+      is_class_conditional: False
+      # Model output channels
+      out_channels: 1
+      # The number of layers in the transformer
+      num_layers: 12
+      # Activation function used in the transformer blocks.
+      activation_fn: "gelu-approximate"
+      # Main attention settings. Yields an inner dimension
+      # of 64*12 = 768
+      attention_bias: True
+      attention_head_dim: 64
+      num_attention_heads: 12
+      attention_type: "default"
+      # The dimension of the cross attention projection.
+      # Must match the dimension of the attention heads.
+      cross_attention_dim: 768
+      # We are using the T5-Base model, which outputs 768 channels.
+      caption_channels: 768
+
+      double_self_attention: False
+      dropout: 0.0
+      norm_elementwise_affine: False
+      norm_eps: 1.0e-06
+      norm_num_groups: 32
+      num_embeds_ada_norm: 1000
+      num_vector_embeds: None
+      only_cross_attention: False
+      project_to_2d_pos: True
+      upcast_attention: False
+      use_linear_projection: False
+      qk_norm: "rms_norm"
+      standardization_norm: "rms_norm"
+      positional_embedding_type: "rope"
+      positional_embedding_theta: 10000.0
+      positional_embedding_max_pos: [20, 2048, 2048]
+      timestep_scale_multiplier: 1000
+      adaptive_norm: "single_scale_shift"
+
+      # Additional conditioning signals for the model. The projections
+      # defined here will be applied before running through the rest of the
+      # score network.
+      conditioning:
+        # The signals (keys in the dictionary) that are available in the conditioning
+        # context.
+        signals: []
+        projections: {}
+        # The context transformer to use at the top of the score network. This transforms
+        # the context with a shared set of parameters.
+        context_transformer_head:
+          # Timestep -> timestep embedding
+          - target: torch.nn.Identity
+            params: {}
+
+# Describes the dataset used in training.
+data:
+  # Spatial width/height of the data input to the model.
+  image_size: 32
+  # Number of channels in the input data
+  num_channels: 1
+  # The number of classes in the dataset
+  num_classes: 10
+  # The number of frames in the input dataset. This could be different
+  # than the number of frames that is in the data itself.
+  input_number_of_frames: 25
+  # Method of processing the input frames. Can be "clip", which takes
+  # the first N frames, or "sample", which skips frames from the input
+  # to get the required number of frames (so a source video of 30 frames, with input_number_of_frames
+  # set to 15, would take every (30//15=2) frames).
+  frame_processing: "clip"
+
+# Describes training parameters, including sampling
+# strategies for input data.
+training:
+  dataset: "video/moving_mnist"
+  batch_size: 128
+  gradient_accumulation_steps: 1
+  mixed_precision: "bf16"
+  num_training_steps: 30000
