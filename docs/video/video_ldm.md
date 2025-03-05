@@ -23,13 +23,13 @@ First, ensure that all of the requirements are installed following the instructi
 Next, you need to train the base image diffusion model. To train the model, run the following from the root of the repository:
 
 ```
-> python training/image/moving_mnist/train.py --config_path configs/image/moving_mnist/ddpm_32x32_v_continuous_clip.yaml --num_training_steps 20000
+> python training/image/train.py --dataset_name image/moving_mnist --batch_size 128 --config_path configs/image/moving_mnist/ddpm_32x32_v_continuous_clip.yaml --num_training_steps 20000
 ```
 
 Now, we can train the video model using the above image model checkpoint. To train the model, run the following from the root of the repository:
 
 ```
-> python training/video/moving_mnist/train.py --config_path configs/video/moving_mnist/video_ldm.yaml --batch_size 8 --load_model_weights_from_checkpoint output/image/moving_mnist/ddpm_32x32_v_continuous_clip/diffusion-20000.pt --num_training_steps 200000
+> python training/video/train.py --dataset_name video/moving_mnist --config_path configs/video/moving_mnist/video_ldm.yaml --batch_size 8 --load_model_weights_from_checkpoint output/image/moving_mnist/ddpm_32x32_v_continuous_clip/diffusion-20000.pt --num_training_steps 200000
 ```
 
 We successfully tested training on a single T4 instance (16GB VRAM) using a batch size of 8.
