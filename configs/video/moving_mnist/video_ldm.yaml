@@ -189,3 +189,12 @@ data:
   # The number of classes in the dataset
   num_classes: 10
   input_number_of_frames: 16
+
+# Describes training parameters, including sampling
+# strategies for input data.
+training:
+  dataset: "video/moving_mnist"
+  batch_size: 16
+  gradient_accumulation_steps: 1
+  mixed_precision: "no"
+  num_training_steps: 200000
