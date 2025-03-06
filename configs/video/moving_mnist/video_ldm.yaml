@@ -1,7 +1,11 @@
-# Video Diffusion Models
+# Video Latent Diffusion Models
 #
 # Configuration file for implementation of "Align your Latents: High-Resolution Video Synthesis 
 # with Latent Diffusion Models", (https://arxiv.org/abs/2304.08818).
+#
+# Note that this configuration diverges from the paper in that we are operating in pixel space
+# here rather than latent space. The MovingMNIST dataset is so small that latent space doesn't 
+# make much sense. We will implement the latent space autoencoder in a separate configuration file.
 diffusion:
   parameterization: "v"
   # Sampling section determines the size of the sampled output
