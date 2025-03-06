@@ -10,6 +10,8 @@ In this example, we train a standard v-parameterized DDPM Unet based model on th
 
 One cool aspect of this model is that since the original image model weights are frozen, the model can generate high quality imagery at the beginning. So at the initial step, you will see correctly generated frames, but with no temporal consistency. This differs from the usual first step of an untrained model, which predicts random noise.
 
+For simplicity (and because the dataset is so small), we are operating in pixel space for this implementation. But we could operate in latent space just as easily, and will leave that to future work.
+
 ## Configuration File
 
 The configuration file to train the image model is located in [Moving MNIST DDPM](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/moving_mnist/ddpm_32x32_v_continuous_clip.yaml)
