@@ -41,7 +41,7 @@ We successfully tested training on a single T4 instance (16GB VRAM) using a batc
 To sample from a pretrained checkpoint, you can run:
 
 ```
-> python training/video/moving_mnist/sample.py --config_path configs/video/moving_mnist/video_ldm.yaml --num_samples 16 --checkpoint output/video/moving_mnist/video_ldm/diffusion-100000.pt
+> python sampling/video/moving_mnist/sample.py --config_path configs/video/moving_mnist/video_ldm.yaml --num_samples 16 --checkpoint output/video/moving_mnist/video_ldm/diffusion-100000.pt
 ```
 
 Output will be saved to the `output/moving_mnist/sample/video_ldm` directory.
