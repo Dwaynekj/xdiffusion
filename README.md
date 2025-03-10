@@ -5,11 +5,20 @@ If you are looking for just the lessons on image diffusion models, checkout [min
 
 ## Requirements
 
-This package built using PyTorch and written in Python 3. To setup an environment to run all of the lessons, we suggest using conda or venv:
+This package built using PyTorch and written in Python 3. Due to package dependencies, this repo requires python 3.10 or greater. To setup an environment to run all of the lessons, we suggest using conda or venv:
 
 ```
 > python3 -m venv xdiffusion_env
 > source xdiffusion_env/bin/activate
+> pip install --upgrade pip
+> pip install -r requirements.txt
+```
+I find [pyenv-virtualenv](https://github.com/pyenv/pyenv-virtualenv) to be very helpful as well, in managing both the virtual environment as well as the python version dependencies.
+
+```
+> pyenv install 3.10.15
+> pyenv virtualenv 3.10.15 xdiffusion_env
+> pyvenv activate xdiffusion_env     
 > pip install --upgrade pip
 > pip install -r requirements.txt
 ```
