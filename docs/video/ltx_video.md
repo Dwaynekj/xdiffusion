@@ -25,7 +25,7 @@ The configuration file for the diffusion model is located in [LTX-Video](https:/
 The first step is to train the VAE model in order to compress the pixel space videos into latent space. We successfully trained the VAE using a batch size of 8 for 100k steps on an A10.
 
 ```
-> torchrun --nproc-per-node 1 --nnodes 1 training/video/autoencoder --config_path configs/video/moving_mnist/ltx_video/autoencoder.yaml
+> torchrun --nproc-per-node 1 --nnodes 1 training/video/autoencoder.py --config_path configs/video/moving_mnist/ltx_video/autoencoder.yaml
 ```
 
 To train the LTX-Video model, use the following, with the pre-trained VAE checkpoint from the first step:
