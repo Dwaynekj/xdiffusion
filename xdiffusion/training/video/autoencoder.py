@@ -107,7 +107,9 @@ def train(
             mixed_precision = "no"
 
     torch.autograd.set_detect_anomaly(True)
-    ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=False, broadcast_buffers=False)
+    ddp_kwargs = DistributedDataParallelKwargs(
+        find_unused_parameters=False, broadcast_buffers=False
+    )
 
     # The accelerate library will handle of the GPU device management for us.
     # Make sure to create it early so that we can gate some data loading on it.
@@ -138,10 +140,12 @@ def train(
 
     # Load the model weights if we have them
     if load_model_weights_from_checkpoint:
-        vae.load_checkpoint(load_model_weights_from_checkpoint)
+        checkpoint = torch.load(load_model_weights_from_checkpoint, map_location="cpu")
+        vae.load_state_dict(checkpoint["model_state_dict"])
 
     if resume_from:
-        vae.load_checkpoint(resume_from)
+        checkpoint = torch.load(resume_from, map_location="cpu")
+        vae.load_state_dict(checkpoint["model_state_dict"])
 
     # Show the model summary
     summary(
@@ -387,7 +391,9 @@ def train(
                     torch.save(
                         {
                             "step": step,
-                            "model_state_dict": vae.state_dict(),
+                            "model_state_dict": accelerator.unwrap_model(
+                                vae
+                            ).state_dict(),
                             "num_optimizers": len(optimizers),
                             "optimizer_state_dicts": [
                                 optimizer.state_dict() for optimizer in optimizers
@@ -440,7 +446,7 @@ def train(
         torch.save(
             {
                 "step": step,
-                "model_state_dict": vae.state_dict(),
+                "model_state_dict": accelerator.unwrap_model(vae).state_dict(),
                 "num_optimizers": len(optimizers),
                 "optimizer_state_dicts": [
                     optimizer.state_dict() for optimizer in optimizers
