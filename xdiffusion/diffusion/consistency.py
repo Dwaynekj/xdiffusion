@@ -234,8 +234,7 @@ class GaussianDiffusion_ConsistencyModel(DiffusionModel):
         self.train()
         return unnormalize_to_zero_to_one(x_0), None
 
-    def print_model_summary(self):
-        batch_size = 4
+    def print_model_summary(self, batch_size: int = 4):
         device = "cuda"
 
         B = batch_size

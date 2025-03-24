@@ -32,9 +32,9 @@ class GaussianDiffusionCascade(DiffusionModel):
             self._layers.append(GaussianDiffusion_DDPM(layer_config))
             layer_idx += 1
 
-    def print_model_summary(self):
+    def print_model_summary(self, batch_size: int = 4):
         for layer in self._layers:
-            layer.print_model_summary()
+            layer.print_model_summary(batch_size)
 
     def models(self) -> List[DiffusionModel]:
         models = []

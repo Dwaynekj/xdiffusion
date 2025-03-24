@@ -62,8 +62,7 @@ class GaussianDiffusion_SDE(DiffusionModel):
         # EMA not supported yet
         return
 
-    def print_model_summary(self):
-        batch_size = 4
+    def print_model_summary(self, batch_size: int = 4):
         device = "cuda"
 
         B = batch_size

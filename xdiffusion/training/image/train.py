@@ -154,7 +154,7 @@ def train(
         _, _ = inject_trainable_lora(diffusion_model, verbose=True)
 
     # Build context to display the model summary.
-    diffusion_model.print_model_summary()
+    diffusion_model.print_model_summary(batch_size=batch_size)
 
     # Now load the dataset. Do it on the main process first in case we have to download
     # it.
