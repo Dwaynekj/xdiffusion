@@ -170,3 +170,17 @@ class SpatialNorm(torch.nn.Module):
         norm_f = self.norm_layer(f)
         new_f = norm_f * self.conv_y(zq) + self.conv_b(zq)
         return new_f
+
+
+class DynamicTanhNorm(torch.nn.Module):
+    """Dynamic tanh normalization, per https://arxiv.org/abs/2503.10622"""
+
+    def __init__(self, dim, init_alpha=0.5):
+        super().__init__()
+        self.alpha = torch.nn.Parameter(torch.ones(1) * init_alpha)
+        self.gamma = torch.nn.Parameter(torch.ones(dim))
+        self.beta = torch.nn.Parameter(torch.zeros(dim))
+
+    def forward(self, x):
+        x = torch.nn.functional.tanh(self.alpha * x)
+        return self.gamma * x + self.beta
