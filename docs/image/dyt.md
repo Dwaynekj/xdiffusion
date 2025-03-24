@@ -29,10 +29,10 @@ We successfully tested training on a single GH200 instance from Lambda (96GB VRA
 To train the flux version of the model, use:
 
 ```
-> python training/image/train.py --config_path configs/image/mnist/flux_dyt.yaml --num_training_steps 20000
+> python training/image/train.py --config_path configs/image/mnist/flux_dyt.yaml --num_training_steps 10000
 ```
 
-We successfully tested training on a single GH200 instance from Lambda (96GB VRAM) using a batch size of 1024 and 20k training steps, for a total cost of $7.59.
+We successfully tested training on a single GH200 instance from Lambda (96GB VRAM) using a batch size of 1024 and 10k training steps, for a total cost of $4.20.
 
 
 ## Sampling
@@ -40,7 +40,7 @@ We successfully tested training on a single GH200 instance from Lambda (96GB VRA
 To sample from a pretrained checkpoint, you can run:
 
 ```
-> python sampling/image/mnist/sample.py --config_path configs/image/mnist/flux_dyt.yaml --num_samples 8 --checkpoint output/image/mnist/flux_dyt/diffusion-20000.pt
+> python sampling/image/mnist/sample.py --config_path configs/image/mnist/flux_dyt.yaml --num_samples 8 --checkpoint output/image/mnist/flux_dyt/diffusion-10000.pt
 ```
 
 Output will be saved to the `output/image/mnist/sample/flux_dyt` directory.
@@ -50,7 +50,8 @@ Output will be saved to the `output/image/mnist/sample/flux_dyt` directory.
 | Config | Checkpoint | Results
 | ------ | ---------- | -------
 | [PixArt-α](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/pixart_alpha_dyt.yaml) | [google drive](https://drive.google.com/file/d/1atzhtv-kRegnabROGZs6olxuVONiRQKI/view?usp=sharing) | ![PixArt-α](https://drive.google.com/uc?export=view&id=1LckcGgmkpk4jL23u6eIRC_DC-DJiGw5S)
-| [FLUX](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/flux_dyt.yaml) | [google drive](https://drive.google.com/file/d/1atzhtv-kRegnabROGZs6olxuVONiRQKI/view?usp=sharing) | ![Flux](https://drive.google.com/uc?export=view&id=1_r8poe1SJxf8UtT4mmQaTT378m26hD-F)
+| [FLUX](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/flux_dyt.yaml) | [google drive](https://drive.google.com/file/d/1c0aWOJ4zfrvJ1kqDxfCCExRFxKBc34cZ/view?usp=sharing) | ![Flux](https://drive.google.com/uc?export=view&id=1Jn2mjodaK25k-CECMFvJ7_MK8s5us6xu)
+
 
 After training the PixArt-α network for 20k steps, the PixArt-α model pipeline is able to generate samples like the below:
 
