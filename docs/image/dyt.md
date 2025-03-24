@@ -71,4 +71,4 @@ three seven six six 7 eight 1 three
 
 ## Other Resources
 
-The others released their inference code and model checkpoints [here](https://github.com/black-forest-labs/flux).
+There was no code or repo released with this paper.
