@@ -1,35 +1,25 @@
-from accelerate import cpu_offload, Accelerator, DataLoaderConfiguration
+from accelerate import Accelerator, DataLoaderConfiguration
 from accelerate.utils import GradientAccumulationPlugin
 from accelerate import DistributedDataParallelKwargs
-import argparse
 from datetime import datetime
 import math
 import os
 from pathlib import Path
 import torch
-from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torchinfo import summary
-from torchvision import transforms, utils
-from torchvision.datasets import MNIST
+from torchvision import utils
 from tqdm import tqdm
-from typing import Callable, List, Optional
+from typing import Optional
 
 from xdiffusion import masking
 from xdiffusion.datasets.utils import load_dataset
-from xdiffusion.diffusion.ddpm import GaussianDiffusion_DDPM
-from xdiffusion.diffusion import DiffusionModel
-from xdiffusion.diffusion.cascade import GaussianDiffusionCascade
-from xdiffusion.layers.ema import create_ema_and_scales_fn
 from xdiffusion.training_utils import preprocess_training_videos
 from xdiffusion.utils import (
     cycle,
-    freeze,
-    get_obj_from_str,
     instantiate_from_config,
     load_yaml,
-    DotConfig,
     video_tensor_to_gif,
 )
 
@@ -106,7 +96,11 @@ def train(
         if not mixed_precision:
             mixed_precision = "no"
 
-    torch.autograd.set_detect_anomaly(True)
+    # TODO: Allow configuration of this through command line.
+    detect_anomalies = False
+    if detect_anomalies:
+        torch.autograd.set_detect_anomaly(True)
+
     ddp_kwargs = DistributedDataParallelKwargs(
         find_unused_parameters=False, broadcast_buffers=False
     )
@@ -185,7 +179,7 @@ def train(
     #  for the 256 × 256 images, which seemed unstable to train with the larger learning rate."
     optimizers = vae.configure_optimizers(learning_rate=4.5e-6)
 
-   # Step counter to keep track of training
+    # Step counter to keep track of training
     step = 0
 
     # Load the optimizers and step counter if we have them from the checkpoint

@@ -1,0 +1,76 @@
+# Configuration for an Hunyuan-Video Causal 3D VAE. The VAE compresses the original
+# (B,C,T+1,H,W) => (B, C', T/c_t + 1, H/c_s, W/c_s) where C' = 16, c_t = 4, c_s = 8.
+# For example, this will compress a single channel source video space of
+# (B, 1, 28, 256, 256) => (B, 16, 7, 32, 32)
+vae_config:
+  target: xdiffusion.autoencoders.hunyuan.HunyuanCausal3DVAE
+  params:
+    in_channels: 1
+    out_channels: 1
+    act_fn: "silu"
+    block_out_channels: [
+      128,
+      256,
+      512,
+      512
+    ]
+    down_block_types: [
+      "DownEncoderBlockCausal3D",
+      "DownEncoderBlockCausal3D",
+      "DownEncoderBlockCausal3D",
+      "DownEncoderBlockCausal3D"
+    ]
+    up_block_types: [
+      "UpDecoderBlockCausal3D",
+      "UpDecoderBlockCausal3D",
+      "UpDecoderBlockCausal3D",
+      "UpDecoderBlockCausal3D"
+    ]
+    latent_channels: 16
+    layers_per_block: 2
+    norm_num_groups: 32
+    sample_size: 256
+    sample_tsize: 28
+    scaling_factor: 0.476986
+    time_compression_ratio: 4
+    spatial_compression_ratio: 8
+    mid_block_add_attention: true
+
+    loss_config:
+      target: xdiffusion.autoencoders.hunyuan.HunyuanCausal3DVAELoss
+      params:
+        disc_start: 10000
+        reconstruction_weight: 1.0
+        perceptual_weight: 0.1
+        adversarial_weight: 0.05
+        kl_weight: 1.0e-06
+        reconstruction_loss: "l1"
+        disc_loss: "hinge"
+        disc_num_layers: 3
+        disc_in_channels: 3
+        use_actnorm: False
+
+# Describes the dataset used in training.
+data:
+  # Spatial width/height of the data input to the model.
+  image_size: 256
+  # Number of channels in the input data
+  num_channels: 1
+  # The number of classes in the dataset
+  num_classes: 10
+  # The number of frames in the input dataset. This could be different
+  # than the number of frames that is in the data itself.
+  input_number_of_frames: 28
+  # Method of processing the input frames. Can be "clip", which takes
+  # the first N frames, or "sample", which skips frames from the input
+  # to get the required number of frames (so a source video of 30 frames, with input_number_of_frames
+  # set to 15, would take every (30//15=2) frames).
+  frame_processing: "clip"
+
+# Describes training parameters, including sampling
+# strategies for input data.
+training:
+  dataset: "video/moving_mnist_256"
+  batch_size: 8
+  gradient_accumulation_steps: 1
+  mixed_precision: "bf16"

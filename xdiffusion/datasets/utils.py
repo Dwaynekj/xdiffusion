@@ -18,6 +18,7 @@ def load_dataset(
         "image/cifar10",
         "image/mnist_embedded_gemma_2",
         "video/moving_mnist",
+        "video/moving_mnist_256",
     ]
 
     if dataset_name == "image/mnist":
@@ -72,6 +73,14 @@ def load_dataset(
         )
     elif dataset_name == "video/moving_mnist":
         from xdiffusion.datasets.moving_mnist import load_moving_mnist
+
+        return load_moving_mnist(
+            training_height=config.image_size,
+            training_width=config.image_size,
+            split=split,
+        )
+    elif dataset_name == "video/moving_mnist_256":
+        from xdiffusion.datasets.moving_mnist_256 import load_moving_mnist
 
         return load_moving_mnist(
             training_height=config.image_size,
