@@ -64,6 +64,7 @@ The following is a list of the supported image models, their current results, an
 | October 2024 | Stable Diffusion 3.5 | [Introducing Stable Diffusion 3.5](https://stability.ai/news/introducing-stable-diffusion-3-5) | [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/sd3.5.yaml) | ![SD 3.5](https://drive.google.com/uc?export=view&id=1_6GKNeTazoZ2RqEyxN2ta8B9UAdBPffB) | [instructions](https://github.com/swookey-thinky/xdiffusion/blob/main/docs/image/sd35.md)
 | November 2024 | | [Training-free Regional Prompting for Diffusion Transformers](https://arxiv.org/abs/2411.02395) | | |
 | November 2024 | JanusFlow | [JanusFlow: Harmonizing Autoregression and Rectified Flow for Unified Multimodal Understanding and Generation](https://arxiv.org/abs/2411.07975) | | |
+| March 2025 | Dynamic Tanh | [Transformers Without Normalization](https://arxiv.org/abs/2503.10622v1) | [config](https://github.com/swookey-thinky/xdiffusion/blob/main/configs/image/mnist/flux_dyt.yaml) | ![Flux](https://drive.google.com/uc?export=view&id=1Jn2mjodaK25k-CECMFvJ7_MK8s5us6xu) | [instructions](https://github.com/swookey-thinky/xdiffusion/blob/main/docs/image/dyt.md)
 
 ## Video Diffusion
 
