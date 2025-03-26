@@ -1,7 +1,7 @@
 # Configuration for an Hunyuan-Video Causal 3D VAE. The VAE compresses the original
 # (B,C,T+1,H,W) => (B, C', T/c_t + 1, H/c_s, W/c_s) where C' = 16, c_t = 4, c_s = 8.
 # For example, this will compress a single channel source video space of
-# (B, 1, 28, 64, 64) => (B, 16, 7, 8, 8)
+# (B, 1, 29, 64, 64) => (B, 16, 8, 8, 8)
 vae_config:
   target: xdiffusion.autoencoders.hunyuan.HunyuanCausal3DVAE
   params:
@@ -47,7 +47,7 @@ vae_config:
         reconstruction_loss: "l1"
         disc_loss: "hinge"
         disc_num_layers: 3
-        disc_in_channels: 3
+        disc_in_channels: 1
         use_actnorm: False
 
 # Describes the dataset used in training.

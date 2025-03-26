@@ -1550,8 +1550,10 @@ class HunyuanCausal3DVAELoss(nn.Module):
         else:
             assert self.reconstruction_loss == "l2"
             rec_loss = (inputs.contiguous() - reconstructions.contiguous()) ** 2
+        rec_loss = torch.mean(rec_loss)
 
         p_loss = self.perceptual_loss(inputs.contiguous(), reconstructions.contiguous())
+        p_loss = torch.mean(p_loss)
 
         kl_loss = posteriors.kl()
         kl_loss = torch.sum(kl_loss) / kl_loss.shape[0]
