@@ -1559,17 +1559,17 @@ class HunyuanCausal3DVAELoss(nn.Module):
         else:
             assert self.reconstruction_loss == "l2"
             rec_loss = (inputs.contiguous() - reconstructions.contiguous()) ** 2
-        rec_loss = self.reconstruction_weight * torch.mean(rec_loss)
+        # rec_loss = self.reconstruction_weight * torch.mean(rec_loss)
 
         # Using the reconstruction loss directly tends to collapse the loss (predict all 0's).
         # Instead, use the negative log-likelihood of the reconstruction loss.
-        # logvar = torch.mean(posteriors.logvar, dim=-1, keepdim=True)
-        # logvar = torch.mean(logvar, dim=-2, keepdim=True)
-        # logvar = torch.mean(logvar, dim=-3, keepdim=True)
-        # logvar = torch.mean(logvar, dim=-4, keepdim=True)
-        # nll_loss = rec_loss / torch.exp(logvar) + logvar
-        # nll_loss = self.reconstruction_weight * nll_loss
-        # nll_loss = torch.sum(nll_loss) / nll_loss.shape[0]
+        logvar = torch.mean(posteriors.logvar, dim=-1, keepdim=True)
+        logvar = torch.mean(logvar, dim=-2, keepdim=True)
+        logvar = torch.mean(logvar, dim=-3, keepdim=True)
+        logvar = torch.mean(logvar, dim=-4, keepdim=True)
+        nll_loss = rec_loss / torch.exp(logvar) + logvar
+        nll_loss = self.reconstruction_weight * nll_loss
+        nll_loss = torch.sum(nll_loss) / nll_loss.shape[0]
 
         p_loss = self.perceptual_loss(inputs.contiguous(), reconstructions.contiguous())
         p_loss = torch.mean(p_loss)
@@ -1584,7 +1584,7 @@ class HunyuanCausal3DVAELoss(nn.Module):
             g_loss = -torch.mean(logits_fake)
 
             loss = (
-                rec_loss
+                nll_loss
                 + self.perceptual_weight * p_loss
                 + self.kl_weight * kl_loss
                 + adopt_weight(
