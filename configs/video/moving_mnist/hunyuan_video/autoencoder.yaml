@@ -1,7 +1,7 @@
 # Configuration for an Hunyuan-Video Causal 3D VAE. The VAE compresses the original
 # (B,C,T+1,H,W) => (B, C', T/c_t + 1, H/c_s, W/c_s) where C' = 16, c_t = 4, c_s = 8.
 # For example, this will compress a single channel source video space of
-# (B, 1, 28, 256, 256) => (B, 16, 7, 32, 32)
+# (B, 1, 28, 64, 64) => (B, 16, 7, 8, 8)
 vae_config:
   target: xdiffusion.autoencoders.hunyuan.HunyuanCausal3DVAE
   params:
@@ -29,7 +29,7 @@ vae_config:
     latent_channels: 16
     layers_per_block: 2
     norm_num_groups: 32
-    sample_size: 256
+    sample_size: 64
     sample_tsize: 28
     scaling_factor: 0.476986
     time_compression_ratio: 4
@@ -53,7 +53,7 @@ vae_config:
 # Describes the dataset used in training.
 data:
   # Spatial width/height of the data input to the model.
-  image_size: 256
+  image_size: 64
   # Number of channels in the input data
   num_channels: 1
   # The number of classes in the dataset
@@ -70,7 +70,7 @@ data:
 # Describes training parameters, including sampling
 # strategies for input data.
 training:
-  dataset: "video/moving_mnist_256"
+  dataset: "video/moving_mnist"
   batch_size: 8
   gradient_accumulation_steps: 1
   mixed_precision: "bf16"

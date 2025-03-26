@@ -141,20 +141,6 @@ def train(
         checkpoint = torch.load(resume_from, map_location="cpu")
         vae.load_state_dict(checkpoint["model_state_dict"])
 
-    # Show the model summary
-    summary(
-        vae,
-        [
-            (
-                batch_size,
-                config.data.num_channels,
-                config.data.input_number_of_frames,
-                config.data.image_size,
-                config.data.image_size,
-            )
-        ],
-    )
-
     # Now load the dataset. Do it on the main process first in case we have to download
     # it.
     with accelerator.main_process_first():
@@ -201,6 +187,22 @@ def train(
     vae = all_device_objects[0]
     dataloader = all_device_objects[1]
     optimizers = all_device_objects[2 : 2 + len(optimizers)]
+
+    # Show the model summary. This uses the on-device version
+    # to speed up the forward pass.
+    if accelerator.is_main_process:
+        summary(
+            vae,
+            [
+                (
+                    batch_size,
+                    config.data.num_channels,
+                    config.data.input_number_of_frames,
+                    config.data.image_size,
+                    config.data.image_size,
+                )
+            ],
+        )
 
     # We are going to train for a fixed number of steps, so set the dataloader
     # to repeat indefinitely over the entire dataset.
