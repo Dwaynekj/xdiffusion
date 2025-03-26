@@ -30,7 +30,7 @@ vae_config:
     layers_per_block: 2
     norm_num_groups: 32
     sample_size: 64
-    sample_tsize: 28
+    sample_tsize: 29
     scaling_factor: 0.476986
     time_compression_ratio: 4
     spatial_compression_ratio: 8
@@ -59,8 +59,9 @@ data:
   # The number of classes in the dataset
   num_classes: 10
   # The number of frames in the input dataset. This could be different
-  # than the number of frames that is in the data itself.
-  input_number_of_frames: 28
+  # than the number of frames that is in the data itself. For Hunyuan-Video,
+  # The compressed size goes from (T+1) -> (1 + T/c_t), so 29 -> 8
+  input_number_of_frames: 29
   # Method of processing the input frames. Can be "clip", which takes
   # the first N frames, or "sample", which skips frames from the input
   # to get the required number of frames (so a source video of 30 frames, with input_number_of_frames
