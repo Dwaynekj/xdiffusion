@@ -1584,7 +1584,7 @@ class HunyuanCausal3DVAELoss(nn.Module):
             g_loss = -torch.mean(logits_fake)
 
             loss = (
-                nll_loss
+                rec_loss
                 + self.perceptual_weight * p_loss
                 + self.kl_weight * kl_loss
                 + adopt_weight(
