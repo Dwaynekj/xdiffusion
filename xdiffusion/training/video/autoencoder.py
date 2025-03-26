@@ -24,7 +24,6 @@ from xdiffusion.utils import (
 )
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-LOG_TRAINING_WEIGHTS = 100
 
 
 def train(
@@ -328,9 +327,6 @@ def train(
             )
             for k, v in log_dict.items():
                 tensorboard_writer.add_scalar(k, v, step)
-
-            if step % LOG_TRAINING_WEIGHTS == 0:
-                accelerator.print(log_dict)
 
             # To help visualize training, periodically sample from the
             # diffusion model to see how well its doing.

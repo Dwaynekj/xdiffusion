@@ -24,7 +24,12 @@ from xdiffusion.autoencoders.losses import (
     vanilla_d_loss,
     weights_init,
 )
-from xdiffusion.utils import DotConfig, instantiate_from_config
+from xdiffusion.utils import (
+    DotConfig,
+    instantiate_from_config,
+    normalize_to_neg_one_to_one,
+    unnormalize_to_zero_to_one,
+)
 
 
 class HunyuanCausal3DVAE(nn.Module, VariationalAutoEncoder):
@@ -103,7 +108,7 @@ class HunyuanCausal3DVAE(nn.Module, VariationalAutoEncoder):
         Encode a batch of images/videos into latents.
 
         Args:
-            x (`torch.FloatTensor`): Input batch of images/videos.
+            x (`torch.FloatTensor`): Input batch of images/videos. Comes in at (B,C,F,H,W) in the range (0,1)
             return_dict (`bool`, *optional*, defaults to `True`):
                 Whether to return a [`~models.autoencoder_kl.AutoencoderKLOutput`] instead of a plain tuple.
 
@@ -112,6 +117,9 @@ class HunyuanCausal3DVAE(nn.Module, VariationalAutoEncoder):
                 [`~models.autoencoder_kl.AutoencoderKLOutput`] is returned, otherwise a plain `tuple` is returned.
         """
         assert len(x.shape) == 5, "The input tensor should have 5 dimensions."
+
+        # Normalize the input
+        x = normalize_to_neg_one_to_one(x)
 
         if self.use_temporal_tiling and x.shape[2] > self.tile_sample_min_tsize:
             return self.temporal_tiled_encode(x, return_dict=return_dict)
@@ -172,7 +180,8 @@ class HunyuanCausal3DVAE(nn.Module, VariationalAutoEncoder):
             decoded = torch.cat(decoded_slices)
         else:
             decoded = self._decode(z)
-        return decoded
+        # Output needs to leave back into the range (0,1)
+        return unnormalize_to_zero_to_one(decoded)
 
     def encode_to_latents(self, x: torch.Tensor) -> torch.Tensor:
         """Encode images into latents.
