@@ -469,7 +469,7 @@ class HunyuanCausal3DVAE(nn.Module, VariationalAutoEncoder):
             return discloss, reconstructions, posterior, log_dict_disc
 
     def get_last_layer(self):
-        return self.decoder.conv_out.weight
+        return self.decoder.conv_out.conv.weight
 
     def configure_optimizers(self, learning_rate):
         opt_ae = torch.optim.Adam(
@@ -478,7 +478,7 @@ class HunyuanCausal3DVAE(nn.Module, VariationalAutoEncoder):
             + list(self.quant_conv.parameters())
             + list(self.post_quant_conv.parameters()),
             lr=learning_rate,
-            betas=(0.5, 0.9),
+            betas=(0.9, 0.999),
         )
         opt_disc = torch.optim.Adam(
             self.loss.discriminator.parameters(), lr=learning_rate, betas=(0.5, 0.9)
@@ -1557,6 +1557,7 @@ class HunyuanCausal3DVAELoss(nn.Module):
         posteriors,
         optimizer_idx,
         global_step,
+        last_layer,
         split="train",
     ):
         if self.reconstruction_loss == "l1":
@@ -1564,23 +1565,13 @@ class HunyuanCausal3DVAELoss(nn.Module):
         else:
             assert self.reconstruction_loss == "l2"
             rec_loss = (inputs.contiguous() - reconstructions.contiguous()) ** 2
-        # rec_loss = self.reconstruction_weight * torch.mean(rec_loss)
-
-        # Using the reconstruction loss directly tends to collapse the loss (predict all 0's).
-        # Instead, use the negative log-likelihood of the reconstruction loss.
-        logvar = torch.mean(posteriors.logvar, dim=-1, keepdim=True)
-        logvar = torch.mean(logvar, dim=-2, keepdim=True)
-        logvar = torch.mean(logvar, dim=-3, keepdim=True)
-        logvar = torch.mean(logvar, dim=-4, keepdim=True)
-        nll_loss = rec_loss / torch.exp(logvar) + logvar
-        nll_loss = self.reconstruction_weight * nll_loss
-        nll_loss = torch.sum(nll_loss) / nll_loss.shape[0]
-
         p_loss = self.perceptual_loss(inputs.contiguous(), reconstructions.contiguous())
-        p_loss = torch.mean(p_loss)
+        nll_loss = torch.mean(
+            self.reconstruction_weight * rec_loss + self.perceptual_weight * p_loss
+        )
 
         kl_loss = posteriors.kl()
-        kl_loss = torch.sum(kl_loss) / kl_loss.shape[0]
+        kl_loss = torch.mean(self.kl_weight * kl_loss)
 
         # now the GAN part
         if optimizer_idx == 0:
@@ -1588,15 +1579,21 @@ class HunyuanCausal3DVAELoss(nn.Module):
             logits_fake = self.discriminator(reconstructions.contiguous())
             g_loss = -torch.mean(logits_fake)
 
-            loss = (
-                nll_loss
-                + self.perceptual_weight * p_loss
-                + self.kl_weight * kl_loss
-                + adopt_weight(
-                    self.adversarial_weight, global_step, self.discriminator_iter_start
+            try:
+                d_weight = self.calculate_adaptive_weight(
+                    nll_loss, g_loss, last_layer=last_layer
                 )
-                * g_loss
+            except RuntimeError:
+                assert not self.training
+                d_weight = torch.tensor(0.0)
+
+            disc_factor = adopt_weight(
+                self.adversarial_weight,
+                global_step,
+                threshold=self.discriminator_iter_start,
             )
+
+            loss = nll_loss + kl_loss + d_weight * disc_factor * g_loss
 
             log = {
                 "{}/total_loss".format(split): loss.clone().detach().mean().item(),
@@ -1604,6 +1601,10 @@ class HunyuanCausal3DVAELoss(nn.Module):
                 "{}/rec_loss".format(split): rec_loss.detach().mean().item(),
                 "{}/p_loss".format(split): p_loss.detach().mean().item(),
                 "{}/g_loss".format(split): g_loss.detach().mean().item(),
+                "{}/d_weight".format(split): d_weight.detach().item(),
+                "{}/disc_factor".format(split): disc_factor,
+                "{}/d_weight".format(split): d_weight.detach().item(),
+                "{}/nll_loss".format(split): nll_loss.detach().mean().item(),
             }
             return loss, log
 
@@ -1625,3 +1626,20 @@ class HunyuanCausal3DVAELoss(nn.Module):
                 "{}/logits_fake".format(split): logits_fake.detach().mean().item(),
             }
             return d_loss, log
+
+    def calculate_adaptive_weight(self, nll_loss, g_loss, last_layer=None):
+        if last_layer is not None:
+            nll_grads = torch.autograd.grad(nll_loss, last_layer, retain_graph=True)[0]
+            g_grads = torch.autograd.grad(g_loss, last_layer, retain_graph=True)[0]
+        else:
+            nll_grads = torch.autograd.grad(
+                nll_loss, self.last_layer[0], retain_graph=True
+            )[0]
+            g_grads = torch.autograd.grad(
+                g_loss, self.last_layer[0], retain_graph=True
+            )[0]
+
+        d_weight = torch.norm(nll_grads) / (torch.norm(g_grads) + 1e-4)
+        d_weight = torch.clamp(d_weight, 0.0, 1e4).detach()
+        d_weight = d_weight * self.discriminator_weight
+        return d_weight
