@@ -450,6 +450,7 @@ class HunyuanCausal3DVAE(nn.Module, VariationalAutoEncoder):
                 posterior,
                 optimizer_idx,
                 global_step,
+                last_layer=self.get_last_layer(),
                 split="train",
             )
             return aeloss, reconstructions, posterior, log_dict_ae
@@ -462,9 +463,13 @@ class HunyuanCausal3DVAE(nn.Module, VariationalAutoEncoder):
                 posterior,
                 optimizer_idx,
                 global_step,
+                last_layer=self.get_last_layer(),
                 split="train",
             )
             return discloss, reconstructions, posterior, log_dict_disc
+
+    def get_last_layer(self):
+        return self.decoder.conv_out.weight
 
     def configure_optimizers(self, learning_rate):
         opt_ae = torch.optim.Adam(
