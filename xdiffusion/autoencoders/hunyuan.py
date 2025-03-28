@@ -1598,7 +1598,9 @@ class HunyuanCausal3DVAELoss(nn.Module):
         )
 
         kl_loss = posteriors.kl()
-        kl_loss = torch.mean(self.kl_weight * kl_loss)
+        kl_loss = torch.mean(kl_loss) * adopt_weight(
+            self.kl_weight, global_step, threshold=self.discriminator_iter_start
+        )
 
         # now the GAN part
         if optimizer_idx == 0:
