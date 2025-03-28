@@ -1,9 +1,8 @@
-from dataclasses import dataclass
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import Dict, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 from torch import nn
 from einops import rearrange
@@ -53,10 +52,10 @@ class HunyuanCausal3DVAE(nn.Module, VariationalAutoEncoder):
             layers_per_block=config.layers_per_block,
             act_fn=config.act_fn,
             norm_num_groups=config.norm_num_groups,
-            double_z=True,
             time_compression_ratio=config.time_compression_ratio,
             spatial_compression_ratio=config.spatial_compression_ratio,
             mid_block_add_attention=config.mid_block_add_attention,
+            latent_logvar=config.latent_logvar,
         )
 
         self.decoder = DecoderCausal3D(
@@ -500,13 +499,16 @@ class EncoderCausal3D(nn.Module):
         layers_per_block: int = 2,
         norm_num_groups: int = 32,
         act_fn: str = "silu",
-        double_z: bool = True,
         mid_block_add_attention=True,
         time_compression_ratio: int = 4,
         spatial_compression_ratio: int = 8,
+        latent_logvar: str = "uniform",
     ):
         super().__init__()
+        assert latent_logvar in ["uniform", "per_channel", "none"]
+
         self.layers_per_block = layers_per_block
+        self.latent_logvar = latent_logvar
 
         self.conv_in = CausalConv3d(
             in_channels, block_out_channels[0], kernel_size=3, stride=1
@@ -572,7 +574,13 @@ class EncoderCausal3D(nn.Module):
         )
         self.conv_act = nn.SiLU()
 
-        conv_out_channels = 2 * out_channels if double_z else out_channels
+        conv_out_channels = out_channels
+        if latent_logvar == "per_channel":
+            conv_out_channels *= 2
+        elif latent_logvar == "uniform":
+            conv_out_channels += 1
+        elif latent_logvar != "none":
+            raise ValueError(f"Invalid latent_log_var: {latent_logvar}")
         self.conv_out = CausalConv3d(
             block_out_channels[-1], conv_out_channels, kernel_size=3
         )
@@ -594,6 +602,25 @@ class EncoderCausal3D(nn.Module):
         sample = self.conv_norm_out(sample)
         sample = self.conv_act(sample)
         sample = self.conv_out(sample)
+
+        if self.latent_logvar == "uniform":
+            last_channel = sample[:, -1:, ...]
+            num_dims = sample.dim()
+
+            if num_dims == 4:
+                # For shape (B, C, H, W)
+                repeated_last_channel = last_channel.repeat(
+                    1, sample.shape[1] - 2, 1, 1
+                )
+                sample = torch.cat([sample, repeated_last_channel], dim=1)
+            elif num_dims == 5:
+                # For shape (B, C, F, H, W)
+                repeated_last_channel = last_channel.repeat(
+                    1, sample.shape[1] - 2, 1, 1, 1
+                )
+                sample = torch.cat([sample, repeated_last_channel], dim=1)
+            else:
+                raise ValueError(f"Invalid input shape: {sample.shape}")
 
         return sample
 
@@ -1641,5 +1668,5 @@ class HunyuanCausal3DVAELoss(nn.Module):
 
         d_weight = torch.norm(nll_grads) / (torch.norm(g_grads) + 1e-4)
         d_weight = torch.clamp(d_weight, 0.0, 1e4).detach()
-        d_weight = d_weight * self.discriminator_weight
+        d_weight = d_weight * self.adversarial_weight
         return d_weight

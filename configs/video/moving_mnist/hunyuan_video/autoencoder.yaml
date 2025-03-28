@@ -35,11 +35,15 @@ vae_config:
     time_compression_ratio: 4
     spatial_compression_ratio: 8
     mid_block_add_attention: true
+    # How to predict the variance. Can be "per_channel" or "uniform".
+    # For moving MNIST, "per_channel" will mode collapse because the distributions
+    # are too simple.
+    latent_logvar: "uniform"
 
     loss_config:
       target: xdiffusion.autoencoders.losses.LPIPSWithDiscriminator
       params:
-        disc_start: 10000
+        disc_start: 1000
         kl_weight: 1.0e-06
         perceptual_weight: 0.5
         disc_weight: 0.5
