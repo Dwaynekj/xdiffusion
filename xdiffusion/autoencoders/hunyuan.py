@@ -1556,6 +1556,7 @@ class HunyuanCausal3DVAELoss(nn.Module):
         disc_num_layers=3,
         disc_in_channels=3,
         use_actnorm=False,
+        kl_start=0,
     ):
 
         super().__init__()
@@ -1576,6 +1577,7 @@ class HunyuanCausal3DVAELoss(nn.Module):
 
         self.discriminator_iter_start = disc_start
         self.disc_loss = hinge_d_loss if disc_loss == "hinge" else vanilla_d_loss
+        self.kl_iter_start = kl_start
 
     def forward(
         self,
@@ -1599,7 +1601,7 @@ class HunyuanCausal3DVAELoss(nn.Module):
 
         kl_loss = posteriors.kl()
         kl_loss = torch.mean(kl_loss) * adopt_weight(
-            self.kl_weight, global_step, threshold=self.discriminator_iter_start
+            self.kl_weight, global_step, threshold=self.kl_iter_start
         )
 
         # now the GAN part

@@ -40,34 +40,35 @@ vae_config:
     # are too simple.
     latent_logvar: "uniform"
 
-    loss_config:
-      target: xdiffusion.autoencoders.losses.LPIPSWithDiscriminator
-      params:
-        disc_start: 1000
-        kl_weight: 1.0e-06
-        perceptual_weight: 0.5
-        disc_weight: 0.5
-        disc_in_channels: 1
-        disc_conditional: false
-        use_3d: True
-        use_reconstruction_gan: True
-        wavelet_loss_weight: 0.5
-        rec_loss: "l2"
-        learned_logvar: False
-
     # loss_config:
-    #   target: xdiffusion.autoencoders.hunyuan.HunyuanCausal3DVAELoss
+    #   target: xdiffusion.autoencoders.losses.LPIPSWithDiscriminator
     #   params:
     #     disc_start: 1000
-    #     reconstruction_weight: 1.0
-    #     perceptual_weight: 0.1
-    #     adversarial_weight: 0.05
     #     kl_weight: 1.0e-06
-    #     reconstruction_loss: "l1"
-    #     disc_loss: "hinge"
-    #     disc_num_layers: 3
+    #     perceptual_weight: 0.5
+    #     disc_weight: 0.5
     #     disc_in_channels: 1
-    #     use_actnorm: False
+    #     disc_conditional: false
+    #     use_3d: True
+    #     use_reconstruction_gan: True
+    #     wavelet_loss_weight: 0.5
+    #     rec_loss: "l2"
+    #     learned_logvar: False
+
+    loss_config:
+      target: xdiffusion.autoencoders.hunyuan.HunyuanCausal3DVAELoss
+      params:
+        disc_start: 1000
+        kl_start: 1000
+        reconstruction_weight: 1.0
+        perceptual_weight: 0.1
+        adversarial_weight: 0.05
+        kl_weight: 1.0e-06
+        reconstruction_loss: "l1"
+        disc_loss: "hinge"
+        disc_num_layers: 3
+        disc_in_channels: 1
+        use_actnorm: False
 
 # Describes the dataset used in training.
 data:
