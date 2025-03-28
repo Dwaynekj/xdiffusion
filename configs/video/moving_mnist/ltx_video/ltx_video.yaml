@@ -1,10 +1,6 @@
-# SoRA: Video generation models as world simulators
+# LTX-Video: Realtime Video Latent Diffusion
 #
-# Configuration file for a SoRA-based text-to-video diffusion model. Since there
-# is no official SoRA code or paper, this model is based on what little information
-# we can glean from public sources. We use two
-# Imagen Video
-#
+# LTX-Video configuration from the paper: https://arxiv.org/abs/2501.00103
 diffusion:
   parameterization: "rectified_flow"
   # Sampling section determines the size of the sampled output
