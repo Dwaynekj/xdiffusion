@@ -446,7 +446,7 @@ class AutoencoderKLCausal3D(torch.nn.Module):
 
     def forward(
         self,
-        sample: torch.FloatTensor,
+        batch: torch.FloatTensor,
         batch_idx=-1,
         optimizer_idx=-1,
         global_step=-1,
@@ -461,7 +461,7 @@ class AutoencoderKLCausal3D(torch.nn.Module):
             return_dict (`bool`, *optional*, defaults to `True`):
                 Whether or not to return a [`DecoderOutput`] instead of a plain tuple.
         """
-        x = sample
+        x = batch
         z, posterior = self.encode(
             x,
             return_posterior=True,
