@@ -2,38 +2,50 @@ from collections import OrderedDict
 from dataclasses import dataclass, fields, is_dataclass
 import numpy as np
 import torch
-from typing import Any, Tuple
+from typing import Any, Tuple, Optional
 
-from xdiffusion.utils import is_torch_available, is_torch_version
+from xdiffusion.utils import is_torch_available, is_torch_version, randn_tensor
 
 
 class DiagonalGaussianDistribution(object):
-    def __init__(self, parameters, deterministic=False):
+    def __init__(self, parameters: torch.Tensor, deterministic: bool = False):
+        if parameters.ndim == 3:
+            dim = 2  # (B, L, C)
+        elif parameters.ndim == 5 or parameters.ndim == 4:
+            dim = 1  # (B, C, T, H ,W) / (B, C, H, W)
+        else:
+            raise NotImplementedError
         self.parameters = parameters
-        self.mean, self.logvar = torch.chunk(parameters, 2, dim=1)
+        self.mean, self.logvar = torch.chunk(parameters, 2, dim=dim)
         self.logvar = torch.clamp(self.logvar, -30.0, 20.0)
         self.deterministic = deterministic
         self.std = torch.exp(0.5 * self.logvar)
         self.var = torch.exp(self.logvar)
         if self.deterministic:
-            self.var = self.std = torch.zeros_like(self.mean).to(
-                device=self.parameters.device
+            self.var = self.std = torch.zeros_like(
+                self.mean, device=self.parameters.device, dtype=self.parameters.dtype
             )
 
-    def sample(self):
-        x = self.mean + self.std * torch.randn(self.mean.shape).to(
-            device=self.parameters.device
+    def sample(self, generator: Optional[torch.Generator] = None) -> torch.FloatTensor:
+        # make sure sample is on the same device as the parameters and has same dtype
+        sample = randn_tensor(
+            self.mean.shape,
+            generator=generator,
+            device=self.parameters.device,
+            dtype=self.parameters.dtype,
         )
+        x = self.mean + self.std * sample
         return x
 
-    def kl(self, other=None):
+    def kl(self, other: "DiagonalGaussianDistribution" = None) -> torch.Tensor:
         if self.deterministic:
             return torch.Tensor([0.0])
         else:
+            reduce_dim = list(range(1, self.mean.ndim))
             if other is None:
                 return 0.5 * torch.sum(
                     torch.pow(self.mean, 2) + self.var - 1.0 - self.logvar,
-                    dim=[1, 2, 3],
+                    dim=reduce_dim,
                 )
             else:
                 return 0.5 * torch.sum(
@@ -42,10 +54,10 @@ class DiagonalGaussianDistribution(object):
                     - 1.0
                     - self.logvar
                     + other.logvar,
-                    dim=[1, 2, 3],
+                    dim=reduce_dim,
                 )
 
-    def nll(self, sample, dims=[1, 2, 3]):
+    def nll(self, sample: torch.Tensor, dims: Tuple[int, ...] = [1, 2, 3]) -> torch.Tensor:
         if self.deterministic:
             return torch.Tensor([0.0])
         logtwopi = np.log(2.0 * np.pi)
@@ -54,9 +66,7 @@ class DiagonalGaussianDistribution(object):
             dim=dims,
         )
 
-    def mode(self):
-        return self.mean
-
+    def mode(self) -> torch.Te
 
 class BaseOutput(OrderedDict):
     """
