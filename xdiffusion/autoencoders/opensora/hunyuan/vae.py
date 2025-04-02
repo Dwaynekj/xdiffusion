@@ -64,7 +64,6 @@ class EncoderCausal3D(nn.Module):
             is_final_block = i == len(block_out_channels) - 1
             num_spatial_downsample_layers = int(np.log2(spatial_compression_ratio))
             num_time_downsample_layers = int(np.log2(time_compression_ratio))
-
             if time_compression_ratio == 4:
                 add_spatial_downsample = bool(i < num_spatial_downsample_layers)
                 add_time_downsample = bool(
@@ -74,6 +73,9 @@ class EncoderCausal3D(nn.Module):
             elif time_compression_ratio == 8:
                 add_spatial_downsample = bool(i < num_spatial_downsample_layers)
                 add_time_downsample = bool(i < num_spatial_downsample_layers)
+            elif time_compression_ratio == 2:
+                add_spatial_downsample = bool(i < num_spatial_downsample_layers)
+                add_time_downsample = bool(i < num_time_downsample_layers)
             else:
                 raise ValueError(
                     f"Unsupported time_compression_ratio: {time_compression_ratio}."
@@ -208,6 +210,9 @@ class DecoderCausal3D(nn.Module):
             elif time_compression_ratio == 8:
                 add_spatial_upsample = bool(i < num_spatial_upsample_layers)
                 add_time_upsample = bool(i < num_spatial_upsample_layers)
+            elif time_compression_ratio == 2:
+                add_spatial_upsample = bool(i < num_spatial_upsample_layers)
+                add_time_upsample = bool(i < num_time_upsample_layers)
             else:
                 raise ValueError(
                     f"Unsupported time_compression_ratio: {time_compression_ratio}."

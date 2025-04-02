@@ -1,7 +1,7 @@
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple, Union
 import torch
 import torch.nn as nn
+from typing import List, Optional, Tuple, Union
 
 from xdiffusion.layers.attention_diffusers import Attention
 from xdiffusion.autoencoders.opensora.hunyuan.vae import (

@@ -18,6 +18,7 @@ from xdiffusion.datasets.utils import load_dataset
 from xdiffusion.training_utils import preprocess_training_videos
 from xdiffusion.utils import (
     cycle,
+    get_constant_schedule_with_warmup,
     instantiate_from_config,
     load_yaml,
     video_tensor_to_gif,
@@ -162,7 +163,24 @@ def train(
     #  former. We left the hyperparameters to their standard values. We set the learning
     #  rate to 2 × 10−4 without any sweeping, and we lowered it to 2 × 10−5
     #  for the 256 × 256 images, which seemed unstable to train with the larger learning rate."
-    optimizers = vae.configure_optimizers(learning_rate=4.5e-6)
+    learning_rate = 4.5e-6
+    if "training" in config and "learning_rate" in config.training:
+        learning_rate = config.training.learning_rate
+    optimizers = vae.configure_optimizers(learning_rate=learning_rate)
+
+    # Configure any learning rate schedules if they exist
+    learning_rate_schedules = []
+    if "training" in config and "learning_rate_schedule" in config.training:
+        learning_rate_schedules = [
+                get_constant_schedule_with_warmup(
+                    optimizer,
+                    **config.training.learning_rate_schedule.params.to_dict(),
+                ) for optimizer in optimizers
+            ]
+    else:
+        learning_rate_schedules =  [
+            get_constant_schedule_with_warmup(optimizer, num_warmup_steps=0) for optimizer in optimizers
+        ]
 
     # Step counter to keep track of training
     step = 0
@@ -182,10 +200,15 @@ def train(
         vae,
         dataloader,
         *optimizers,
+        *learning_rate_schedules,
     )
     vae = all_device_objects[0]
     dataloader = all_device_objects[1]
     optimizers = all_device_objects[2 : 2 + len(optimizers)]
+    learning_rate_schedules = all_device_objects[2 + len(optimizers) :]
+    assert len(optimizers) == len(
+        learning_rate_schedules
+    ), "Optimizers and learning rate schedules are not the same length!"
 
     # Show the model summary. This uses the on-device version
     # to speed up the forward pass.
@@ -297,6 +320,7 @@ def train(
                     # Step and zero the optimizer
                     for optimizer_idx, optimizer in enumerate(optimizers):
                         optimizer.step()
+                        learning_rate_schedules[optimizer_idx].step()
                         optimizer.zero_grad()
 
                 average_posterior_mean_cumulative += posterior.mean.detach().mean()

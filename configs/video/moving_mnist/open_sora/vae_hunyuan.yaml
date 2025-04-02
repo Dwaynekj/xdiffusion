@@ -7,52 +7,70 @@ vae_config:
   params:
     in_channels: 1
     out_channels: 1
+    act_fn: "silu"
     latent_channels: 16
     layers_per_block: 2
     norm_num_groups: 32
-    scale_factor: 0.476986
+    scale_factor: 1.0
     shift_factor:  0
     time_compression_ratio: 4
     spatial_compression_ratio: 8
     mid_block_add_attention: True
     block_out_channels: [128, 256, 512, 512]
     sample_size: 64
-    sample_tsize: 32
+    sample_tsize: 29
     use_slicing: False
-    use_spatial_tiling: True
-    use_temporal_tiling: True
+    use_spatial_tiling: False
+    use_temporal_tiling: False
     tile_overlap_factor: 0.25
     dropout: 0.0
     channel: False
+    # These settings are configured for a Moving MNIST version of this
+    # 3D VAE. In particular, it's challenging for such a large VAE to reconstruct
+    # a simple dataset like Moving MNIST, because it tends to mode collapse to 0
+    # very quickly. So we focus on the reconstruction loss only at the beginning,
+    # combined with a slow learning rate warmup, before layering in the additional losses.
+    # One other difference is we use the L2 reconstruction loss here, rather than the L1
+    # loss as specified in the paper. The L1 loss caused very quick mode collapse, regardless
+    # of the warmup schedule or other hyperparameters we chose.
     loss_config:
       target: xdiffusion.autoencoders.losses.LPIPSWithDiscriminator
       params:
-        disc_start: 1000
-        kl_weight: 1.0e-06
-        perceptual_weight: 0.5
-        disc_weight: 0.5
-        disc_in_channels: 1
-        disc_conditional: false
-        use_3d: True
-        use_reconstruction_gan: True
-        wavelet_loss_weight: 0.5
         rec_loss: "l2"
+        # The iteration to start the percepual loss
+        perceptual_start: 1000
+        # The weight for the perceptual loss
+        perceptual_weight: 0.1
+        # The iteration to start the KL divergence loss
+        kl_start: 5000
+        # The weight for the KL divergence loss
+        kl_weight: 1.0e-06
+        # The iteration to start the discriminator
+        disc_start: 0
+        # The number of input channels to the discriminator
+        disc_in_channels: 1
+        # True if the discriminator is conditional.
+        disc_conditional: False
+        # The iteration to start the adversarial loss
+        adversarial_start: 10000
+        # The weight to use for the adversarial loss
+        adversarial_weight: 0.05
+        # The iteration to start the wavelet loss
+        wavelet_start: 0
+        # The weight to use for the wavelet loss
+        wavelet_loss_weight: 0.0
+        # True if this is a 3D VAE, False otherwise.
+        use_3d: True
+        # True if we should use the reconstruction GAN formulation,
+        # from LTX-Video.
+        use_reconstruction_gan: False
+        # True if we should use a learned log variance. False to use
+        # the log variance of the posterior distribution.
         learned_logvar: False
-
-    # loss_config:
-    #   target: xdiffusion.autoencoders.hunyuan.HunyuanCausal3DVAELoss
-    #   params:
-    #     disc_start: 1000
-    #     kl_start: 1000
-    #     reconstruction_weight: 1.0
-    #     perceptual_weight: 0.1
-    #     adversarial_weight: 0.05
-    #     kl_weight: 1.0e-06
-    #     reconstruction_loss: "l1"
-    #     disc_loss: "hinge"
-    #     disc_num_layers: 3
-    #     disc_in_channels: 1
-    #     use_actnorm: False
+        # True if we should calculate the NLL of the reconstruction loss,
+        # False to use the reconstruction loss directly.
+        use_nll: False
+        use_adaptive_adversarial_weight: False
 
 # Describes the dataset used in training.
 data:
@@ -65,7 +83,7 @@ data:
   # The number of frames in the input dataset. This could be different
   # than the number of frames that is in the data itself. For Hunyuan-Video,
   # The compressed size goes from (T+1) -> (1 + T/c_t), so 29 -> 8
-  input_number_of_frames: 32
+  input_number_of_frames: 29
   # Method of processing the input frames. Can be "clip", which takes
   # the first N frames, or "sample", which skips frames from the input
   # to get the required number of frames (so a source video of 30 frames, with input_number_of_frames
@@ -79,3 +97,8 @@ training:
   batch_size: 8
   gradient_accumulation_steps: 1
   mixed_precision: "bf16"
+  learning_rate: 4.5e-06
+  learning_rate_schedule:
+    schedule: constant
+    params:
+      num_warmup_steps: 1000

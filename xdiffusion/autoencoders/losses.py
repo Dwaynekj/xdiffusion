@@ -21,8 +21,8 @@ class LPIPSWithDiscriminator(nn.Module):
         pixelloss_weight=1.0,
         disc_num_layers=3,
         disc_in_channels=3,
-        disc_factor=1.0,
-        disc_weight=1.0,
+        adversarial_weight: float = 1.0,
+        adversarial_start: int = 0,
         perceptual_weight=1.0,
         use_actnorm=False,
         disc_conditional=False,
@@ -32,6 +32,11 @@ class LPIPSWithDiscriminator(nn.Module):
         wavelet_loss_weight=0.0,
         rec_loss="l1",
         learned_logvar=True,
+        use_nll=True,
+        kl_start: int = 0,
+        perceptual_start: int = 0,
+        wavelet_start: int = 0,
+        use_adaptive_adversarial_weight: bool = True,
     ):
 
         super().__init__()
@@ -85,10 +90,15 @@ class LPIPSWithDiscriminator(nn.Module):
         self.rec_loss = rec_loss
         self.discriminator_iter_start = disc_start
         self.disc_loss = hinge_d_loss if disc_loss == "hinge" else vanilla_d_loss
-        self.disc_factor = disc_factor
-        self.discriminator_weight = disc_weight
+        self.adversarial_weight = adversarial_weight
+        self.adversarial_start = adversarial_start
         self.disc_conditional = disc_conditional
         self.use_reconstruction_gan = use_reconstruction_gan
+        self.use_nll = use_nll
+        self.perceptual_start = perceptual_start
+        self.kl_start = kl_start
+        self.wavelet_start = wavelet_start
+        self.use_adaptive_adversarial_weight = use_adaptive_adversarial_weight
 
     def calculate_adaptive_weight(self, nll_loss, g_loss, last_layer=None):
         if last_layer is not None:
@@ -103,7 +113,7 @@ class LPIPSWithDiscriminator(nn.Module):
             )[0]
         d_weight = torch.norm(nll_grads) / (torch.norm(g_grads) + 1e-4)
         d_weight = torch.clamp(d_weight, 0.0, 1e4).detach()
-        d_weight = d_weight * self.discriminator_weight
+        d_weight = d_weight * self.adversarial_weight
         return d_weight
 
     def forward(
@@ -124,19 +134,21 @@ class LPIPSWithDiscriminator(nn.Module):
             assert self.rec_loss == "l2"
             rec_loss = (inputs.contiguous() - reconstructions.contiguous()) ** 2
 
-        if self.perceptual_weight > 0:
+        perceptual_weight = adopt_weight(self.perceptual_weight, global_step=global_step, threshold=self.perceptual_start)
+        if perceptual_weight > 0:
             p_loss = self.perceptual_loss(
                 inputs.contiguous(), reconstructions.contiguous()
             )
-            rec_loss = rec_loss + self.perceptual_weight * p_loss
+            rec_loss = rec_loss + perceptual_weight * p_loss
 
-        if self.wavelet_loss_weight > 0.0:
+        wavelet_loss_weight = adopt_weight(self.wavelet_loss_weight, global_step=global_step, threshold=self.wavelet_start)
+        if wavelet_loss_weight > 0.0:
             w_loss = self.wavelet_loss(
                 reconstructions.contiguous(), inputs.contiguous()
             )
-            rec_loss = rec_loss + self.wavelet_loss_weight * w_loss
+            rec_loss = rec_loss + wavelet_loss_weight * w_loss
         else:
-            w_loss = 0.0
+            w_loss = torch.zeros_like(rec_loss)
 
         if self.learned_logvar:
             logvar = self.logvar
@@ -181,24 +193,21 @@ class LPIPSWithDiscriminator(nn.Module):
                 )
             g_loss = -torch.mean(logits_fake)
 
-            if self.disc_factor > 0.0:
-                try:
+            try:
+                if self.use_adaptive_adversarial_weight:
                     d_weight = self.calculate_adaptive_weight(
                         nll_loss, g_loss, last_layer=last_layer
                     )
-                except RuntimeError:
-                    assert not self.training
-                    d_weight = torch.tensor(0.0)
-            else:
-                d_weight = torch.tensor(0.0)
+                else:
+                    d_weight = torch.ones_like(g_loss) * self.adversarial_weight
+            except RuntimeError:
+                assert not self.training
+                d_weight = torch.zeros_like(g_loss)
 
-            disc_factor = adopt_weight(
-                self.disc_factor, global_step, threshold=self.discriminator_iter_start
-            )
             loss = (
-                weighted_nll_loss
-                + self.kl_weight * kl_loss
-                + d_weight * disc_factor * g_loss
+                weighted_nll_loss if self.use_nll else torch.mean(rec_loss)
+                + adopt_weight(self.kl_weight, global_step=global_step, threshold=self.kl_start) * kl_loss
+                + adopt_weight(d_weight, global_step, threshold=self.adversarial_start) * g_loss
             )
 
             log = {
@@ -208,7 +217,6 @@ class LPIPSWithDiscriminator(nn.Module):
                 "{}/nll_loss".format(split): nll_loss.detach().mean().item(),
                 "{}/rec_loss".format(split): rec_loss.detach().mean().item(),
                 "{}/d_weight".format(split): d_weight.detach().item(),
-                "{}/disc_factor".format(split): disc_factor,
                 "{}/g_loss".format(split): g_loss.detach().mean().item(),
                 "{}/w_loss".format(split): w_loss.detach().mean().item(),
                 "{}/w_loss_weight".format(split): self.wavelet_loss_weight,
@@ -268,7 +276,7 @@ class LPIPSWithDiscriminator(nn.Module):
                 disc_loss = self.disc_loss(logits_real, logits_fake)
 
             disc_factor = adopt_weight(
-                self.disc_factor, global_step, threshold=self.discriminator_iter_start
+                1.0, global_step, threshold=self.discriminator_iter_start
             )
             d_loss = disc_factor * disc_loss
 
