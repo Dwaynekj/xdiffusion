@@ -13,7 +13,12 @@ from xdiffusion.autoencoders.opensora.hunyuan.vae import (
 from xdiffusion.autoencoders.distributions import (
     DiagonalGaussianDistribution,
 )
-from xdiffusion.utils import DotConfig
+from xdiffusion.utils import (
+    DotConfig,
+    instantiate_from_config,
+    normalize_to_neg_one_to_one,
+    unnormalize_to_zero_to_one,
+)
 
 
 @dataclass
@@ -113,6 +118,7 @@ class AutoencoderKLCausal3D(torch.nn.Module):
             sample_size / (2 ** (len(config.block_out_channels) - 1))
         )
         self.tile_overlap_factor = config.tile_overlap_factor
+        self.loss = instantiate_from_config(config.loss_config._cfg)
 
     def encode(
         self,
@@ -134,6 +140,8 @@ class AutoencoderKLCausal3D(torch.nn.Module):
                 [`~models.autoencoder_kl.AutoencoderKLOutput`] is returned, otherwise a plain `tuple` is returned.
         """
         assert len(x.shape) == 5, "The input tensor should have 5 dimensions."
+
+        x = normalize_to_neg_one_to_one(x)
 
         if self.use_temporal_tiling and x.shape[2] > self.tile_sample_min_tsize:
             posterior = self.temporal_tiled_encode(x)
@@ -205,7 +213,7 @@ class AutoencoderKLCausal3D(torch.nn.Module):
             decoded = torch.cat(decoded_slices)
         else:
             decoded = self._decode(z).sample
-        return decoded
+        return unnormalize_to_zero_to_one(decoded)
 
     def blend_v(
         self, a: torch.Tensor, b: torch.Tensor, blend_extent: int
@@ -425,9 +433,23 @@ class AutoencoderKLCausal3D(torch.nn.Module):
 
         return DecoderOutput(sample=dec)
 
+    def encode_to_latents(self, x: torch.Tensor) -> torch.Tensor:
+        """Encode images into latents.
+        Input comes in at (B,C,F,H,W) in the range (0,1)
+        """
+        z = self.encode(x, sample_posterior=True, return_posterior=False)
+        return z
+
+    def decode_from_latents(self, z: torch.Tensor, **kwargs) -> torch.Tensor:
+        """Decodes latents into images."""
+        return self.decode(z)
+
     def forward(
         self,
         sample: torch.FloatTensor,
+        batch_idx=-1,
+        optimizer_idx=-1,
+        global_step=-1,
         sample_posterior: bool = True,
         generator: Optional[torch.Generator] = None,
     ) -> Tuple[torch.FloatTensor, DiagonalGaussianDistribution, torch.FloatTensor]:
@@ -448,4 +470,48 @@ class AutoencoderKLCausal3D(torch.nn.Module):
         )
         dec = self.decode(z)
 
-        return (dec, posterior, z)
+        if optimizer_idx == -1:
+            return dec, posterior
+
+        if optimizer_idx == 0:
+            # train encoder+decoder+logvar
+            aeloss, log_dict_ae = self.loss(
+                x,
+                dec,
+                posterior,
+                optimizer_idx,
+                global_step,
+                last_layer=self.get_last_layer(),
+                split="train",
+            )
+            return aeloss, dec, posterior, log_dict_ae
+
+        if optimizer_idx == 1:
+            # train the discriminator
+            discloss, log_dict_disc = self.loss(
+                x,
+                dec,
+                posterior,
+                optimizer_idx,
+                global_step,
+                last_layer=self.get_last_layer(),
+                split="train",
+            )
+            return discloss, dec, posterior, log_dict_disc
+
+    def get_last_layer(self):
+        return self.decoder.conv_out.conv.weight
+
+    def configure_optimizers(self, learning_rate):
+        opt_ae = torch.optim.Adam(
+            list(self.encoder.parameters())
+            + list(self.decoder.parameters())
+            + list(self.quant_conv.parameters())
+            + list(self.post_quant_conv.parameters()),
+            lr=learning_rate,
+            betas=(0.9, 0.999),
+        )
+        opt_disc = torch.optim.Adam(
+            self.loss.discriminator.parameters(), lr=learning_rate, betas=(0.5, 0.9)
+        )
+        return [opt_ae, opt_disc]
