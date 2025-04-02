@@ -57,7 +57,9 @@ class DiagonalGaussianDistribution(object):
                     dim=reduce_dim,
                 )
 
-    def nll(self, sample: torch.Tensor, dims: Tuple[int, ...] = [1, 2, 3]) -> torch.Tensor:
+    def nll(
+        self, sample: torch.Tensor, dims: Tuple[int, ...] = [1, 2, 3]
+    ) -> torch.Tensor:
         if self.deterministic:
             return torch.Tensor([0.0])
         logtwopi = np.log(2.0 * np.pi)
@@ -66,7 +68,9 @@ class DiagonalGaussianDistribution(object):
             dim=dims,
         )
 
-    def mode(self) -> torch.Te
+    def mode(self) -> torch.Tensor:
+        return self.mean
+
 
 class BaseOutput(OrderedDict):
     """
