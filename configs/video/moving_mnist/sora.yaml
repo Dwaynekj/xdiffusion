@@ -2,9 +2,10 @@
 #
 # Configuration file for a SoRA-based text-to-video diffusion model. Since there
 # is no official SoRA code or paper, this model is based on what little information
-# we can glean from public sources. We use two
-# Imagen Video
+# we can glean from public sources.
 #
+# This configuration is based on a pixel space OpenSora diffusion model from
+# Technical Report 2: http://github.com/hpcaitech/Open-Sora/blob/main/docs/report_02.md
 diffusion:
   parameterization: "rectified_flow"
   # Sampling section determines the size of the sampled output

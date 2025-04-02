@@ -576,8 +576,10 @@ class EncoderCausal3D(nn.Module):
 
         conv_out_channels = out_channels
         if latent_logvar == "per_channel":
+            print("Instantiating encoder with per-channel log variance prediction.")
             conv_out_channels *= 2
         elif latent_logvar == "uniform":
+            print("Instantiating encoder with uniform log variance preduction.")
             conv_out_channels += 1
         elif latent_logvar != "none":
             raise ValueError(f"Invalid latent_log_var: {latent_logvar}")
