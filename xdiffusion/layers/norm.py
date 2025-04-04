@@ -228,3 +228,21 @@ class DynamicTanhNorm(torch.nn.Module):
     def forward(self, x):
         x = torch.nn.functional.tanh(self.alpha * x)
         return self.gamma * x + self.beta
+
+
+def get_norm_layer(norm_layer):
+    """
+    Get the normalization layer.
+
+    Args:
+        norm_layer (str): The type of normalization layer.
+
+    Returns:
+        norm_layer (nn.Module): The normalization layer.
+    """
+    if norm_layer == "layer":
+        return torch.nn.LayerNorm
+    elif norm_layer == "rms":
+        return RMSNorm
+    else:
+        raise NotImplementedError(f"Norm layer {norm_layer} is not implemented")

@@ -9,10 +9,11 @@ ACT2CLS = {
     "mish": nn.Mish,
     "gelu": nn.GELU,
     "relu": nn.ReLU,
+    "gelu_tanh": lambda: nn.GELU(approximate="tanh"),
 }
 
 
-def get_activation(act_fn: str) -> nn.Module:
+def get_activation(act_fn: str, return_cls: bool = False) -> nn.Module:
     """Helper function to get activation function from string.
 
     Args:
@@ -24,7 +25,11 @@ def get_activation(act_fn: str) -> nn.Module:
 
     act_fn = act_fn.lower()
     if act_fn in ACT2CLS:
-        return ACT2CLS[act_fn]()
+        if return_cls:
+            return ACT2CLS[act_fn]
+        else:
+            return ACT2CLS[act_fn]()
+
     else:
         raise ValueError(
             f"activation function {act_fn} not found in ACT2FN mapping {list(ACT2CLS.keys())}"

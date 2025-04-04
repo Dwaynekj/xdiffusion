@@ -1,0 +1,228 @@
+# Hunyuan-Video: A Systematic Framework For Large Video Generative Models
+#
+# Hunyuan-Video configuration from the paper: https://arxiv.org/abs/2412.03603
+diffusion:
+  parameterization: "rectified_flow"
+  # Sampling section determines the size of the sampled output
+  # from the model, and defines the sampling method used
+  sampling:
+    output_channels: 1
+    output_spatial_size: 64
+    output_frames: 25
+    # Typically, the initial timestep is 0, but we save
+    # the last diffusion timestep for the VAE.
+    initial_timestep: 1
+    target: xdiffusion.samplers.rectified_flow.AncestralSampler
+    params: {}
+
+  # The noise scheduler to use with the forward diffusion process.
+  noise_scheduler:
+    target: xdiffusion.scheduler.DiscreteRectifiedFlowNoiseScheduler
+    params:
+      # The number of noise scales
+      steps: 1000
+      # The maximum time
+      max_time: 1.0
+      # The distribution for sample times
+      distribution: "logit-normal"
+  sde:
+    target: xdiffusion.sde.rectified_flow.RectifiedFlow
+    params:
+      N: 1000
+      T: 1.0
+  # A preprocessor to use with the context before sending to the score network.
+  context_preprocessing:
+      # First convert the input prompts into token embeddings using the
+      # MLLM model.
+      - target: xdiffusion.layers.hunyuan_video.text_encoder.TextEncoder
+        params:
+          model: "xtuner/llava-llama-3-8b-v1_1-transformers"
+          text_encoder_type: "llm"
+          # The max length of the text token sequence
+          max_length: 256
+          hidden_state_skip_layer: 2
+          prompt_template: "dit-llm-encode"
+          prompt_template_video: "dit-llm-encode-video"
+          context_output_key: "hv_llm_embeddings"
+          context_input_key: "text_prompts"
+      # Also convert the input prompts into token embeddings using the
+      # Clip-L model.
+      - target: xdiffusion.layers.hunyuan_video.text_encoder.TextEncoder
+        params:
+          model: "openai/clip-vit-large-patch14"
+          text_encoder_type: "clipL"
+          # The max length of the text token sequence
+          max_length: 77
+          prompt_template: "dit-llm-encode"
+          prompt_template_video: "dit-llm-encode-video"
+          context_output_key: "hv_clip_embeddings"
+          context_input_key: "text_prompts"
+  # A preprocessor for input to the model.
+  input_preprocessing:
+    target: xdiffusion.context.IgnoreInputPreprocessor
+    params: {}
+  # Setting for classifier free guidance.
+  classifier_free_guidance:
+    # Classifier-free guidance scale, where the value is >= 1.0
+    classifier_free_guidance: 1.0
+    # Unconditional guidance probability
+    unconditional_guidance_probability: 0.2
+    # The context signals to apply guidance to.
+    signals: ["text_prompts"]
+    # For classifier free guidance, we need the ability to create an unconditional
+    # context given the conditional context. This unconditional context needs
+    # to be applied in both training and sampling, and will return a new
+    # context dictionary given the original context dictionary.
+    unconditional_context:
+      target: xdiffusion.context.UnconditionalTextPromptsAdapter
+      params: {}
+  dynamic_thresholding:
+    enable: False
+    p: 0.99
+    c: 1.7
+
+  # The latent encoder for converting from pixel space to latent space
+  latent_encoder:
+    target: xdiffusion.autoencoders.hunyuan.HunyuanCausal3DVAE
+    instantiate_with_config_struct: True
+    params:
+      in_channels: 1
+      out_channels: 1
+      act_fn: "silu"
+      block_out_channels: [
+        128,
+        256,
+        512,
+        512
+      ]
+      down_block_types: [
+        "DownEncoderBlockCausal3D",
+        "DownEncoderBlockCausal3D",
+        "DownEncoderBlockCausal3D",
+        "DownEncoderBlockCausal3D"
+      ]
+      up_block_types: [
+        "UpDecoderBlockCausal3D",
+        "UpDecoderBlockCausal3D",
+        "UpDecoderBlockCausal3D",
+        "UpDecoderBlockCausal3D"
+      ]
+      latent_channels: 16
+      layers_per_block: 2
+      norm_num_groups: 32
+      sample_size: 64
+      sample_tsize: 29
+      scaling_factor: 1.0
+      time_compression_ratio: 4
+      spatial_compression_ratio: 8
+      mid_block_add_attention: True
+
+      # How to predict the variance. Can be "per_channel" or "uniform".
+      # For moving MNIST, "per_channel" will mode collapse because the distributions
+      # are too simple.
+      latent_logvar: "uniform"
+
+      # These settings are configured for a Moving MNIST version of this
+      # 3D VAE. In particular, it's challenging for such a large VAE to reconstruct
+      # a simple dataset like Moving MNIST, because it tends to mode collapse to 0
+      # very quickly. So we focus on the reconstruction loss only at the beginning,
+      # combined with a slow learning rate warmup, before layering in the additional losses.
+      # One other difference is we use the L2 reconstruction loss here, rather than the L1
+      # loss as specified in the paper. The L1 loss caused very quick mode collapse, regardless
+      # of the warmup schedule or other hyperparameters we chose.
+      loss_config:
+        target: xdiffusion.autoencoders.losses.LPIPSWithDiscriminator
+        params:
+          rec_loss: "l2"
+          # The iteration to start the percepual loss
+          perceptual_start: 1000
+          # The weight for the perceptual loss
+          perceptual_weight: 0.1
+          # The iteration to start the KL divergence loss
+          kl_start: 5000
+          # The weight for the KL divergence loss
+          kl_weight: 1.0e-06
+          # The iteration to start the discriminator
+          disc_start: 10000
+          # The weight for the discriminator loss
+          disc_weight: 0.05
+          # The number of input channels to the discriminator
+          disc_in_channels: 1
+          # True if the discriminator is conditional.
+          disc_conditional: false
+          # The iteration to start the wavelet loss
+          wavelet_start: 0
+          # The weight to use for the wavelet loss
+          wavelet_loss_weight: 0.0
+          # True if this is a 3D VAE, False otherwise.
+          use_3d: True
+          # True if we should use the reconstruction GAN formulation,
+          # from LTX-Video.
+          use_reconstruction_gan: False
+          # True if we should use a learned log variance. False to use
+          # the log variance of the posterior distribution.
+          learned_logvar: False
+          # True if we should calculate the NLL of the reconstruction loss,
+          # False to use the reconstruction loss directly.
+          use_nll: False
+
+  # Defines the score network for predicting the noise parameter. This score
+  # network accepts latent space input of shape (B,16,8,8,8).
+  score_network:
+    target: xdiffusion.score_networks.hunyuan_video.HYVideoDiffusionTransformer
+    params:
+      # Spatial resolution of the input
+      input_spatial_size: 8
+      # Model input channels
+      input_channels: 16
+      # Model input number of frames
+      input_number_of_frames: 8
+      # True if we are learning the variance in addition
+      # to the noise prediction.
+      is_learned_sigma: False
+      # True if we are class conditional.
+      is_class_conditional: False
+      patch_size: [1, 2, 2]
+      in_channels:  16  # Should be VAE.config.latent_channels.
+      out_channels: 16
+      hidden_size: 768
+      heads_num: 12
+      mlp_width_ratio: 4.0
+      mlp_act_type: "gelu_tanh"
+      mm_double_blocks_depth: 6
+      mm_single_blocks_depth: 12
+      rope_dim_list: [16, 56, 56]
+      qkv_bias: True
+      qk_norm: True
+      qk_norm_type: "rms"
+      guidance_embed: False  # For modulation.
+      text_projection: "single_refiner"
+      use_attention_mask: True
+      clip_states_dim:  768
+      text_states_dim: 4096
+
+# Describes the dataset used in training.
+data:
+  # Spatial width/height of the data input to the model.
+  image_size: 64
+  # Number of channels in the input data
+  num_channels: 1
+  # The number of classes in the dataset
+  num_classes: 10
+  # The number of frames in the input dataset. This could be different
+  # than the number of frames that is in the data itself.
+  input_number_of_frames: 29
+  # Method of processing the input frames. Can be "clip", which takes
+  # the first N frames, or "sample", which skips frames from the input
+  # to get the required number of frames (so a source video of 30 frames, with input_number_of_frames
+  # set to 15, would take every (30//15=2) frames).
+  frame_processing: "clip"
+
+# Describes training parameters, including sampling
+# strategies for input data.
+training:
+  dataset: "video/moving_mnist"
+  batch_size: 128
+  gradient_accumulation_steps: 1
+  mixed_precision: "bf16"
+  num_training_steps: 100000
