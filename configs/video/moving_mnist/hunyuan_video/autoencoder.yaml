@@ -37,9 +37,7 @@ vae_config:
     mid_block_add_attention: True
 
     # How to predict the variance. Can be "per_channel" or "uniform".
-    # For moving MNIST, "per_channel" will mode collapse because the distributions
-    # are too simple.
-    latent_logvar: "uniform"
+    latent_logvar: "per_channel"
 
     # These settings are configured for a Moving MNIST version of this
     # 3D VAE. In particular, it's challenging for such a large VAE to reconstruct
@@ -62,13 +60,15 @@ vae_config:
         # The weight for the KL divergence loss
         kl_weight: 1.0e-06
         # The iteration to start the discriminator
-        disc_start: 10000
-        # The weight for the discriminator loss
-        disc_weight: 0.05
+        disc_start: 0
         # The number of input channels to the discriminator
         disc_in_channels: 1
         # True if the discriminator is conditional.
-        disc_conditional: false
+        disc_conditional: False
+        # The iteration to start the adversarial loss
+        adversarial_start: 10000
+        # The weight to use for the adversarial loss
+        adversarial_weight: 0.05
         # The iteration to start the wavelet loss
         wavelet_start: 0
         # The weight to use for the wavelet loss
@@ -84,6 +84,7 @@ vae_config:
         # True if we should calculate the NLL of the reconstruction loss,
         # False to use the reconstruction loss directly.
         use_nll: False
+        use_adaptive_adversarial_weight: False
 
 # Describes the dataset used in training.
 data:
@@ -110,3 +111,8 @@ training:
   batch_size: 8
   gradient_accumulation_steps: 1
   mixed_precision: "bf16"
+  learning_rate: 4.5e-06
+  learning_rate_schedule:
+    schedule: constant
+    params:
+      num_warmup_steps: 1000
