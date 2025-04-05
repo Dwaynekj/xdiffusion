@@ -17,13 +17,23 @@ from xdiffusion.layers.hunyuan_video.embedding import (
     PatchEmbed,
     TextProjection,
     FinalLayer,
-    apply_rotary_emb,
 )
+from xdiffusion.layers.hunyuan_video.rope import apply_rotary_emb
 from xdiffusion.layers.hunyuan_video.token_refiner import SingleTokenRefiner
 from xdiffusion.layers.mlp import Mlp
 from xdiffusion.layers.modulate import ModulateDiT, modulate, apply_gate
 from xdiffusion.layers.norm import get_norm_layer
 from xdiffusion.utils import DotConfig
+
+attention_mode = "torch"
+
+try:
+    import flash_attn
+    from flash_attn.flash_attn_interface import _flash_attn_forward
+    from flash_attn.flash_attn_interface import flash_attn_varlen_func
+    attention_mode = "flash"
+except ImportError:
+    attention_mode = "torch"
 
 
 class MMDoubleStreamBlock(nn.Module):
@@ -195,6 +205,7 @@ class MMDoubleStreamBlock(nn.Module):
                 max_seqlen_q=max_seqlen_q,
                 max_seqlen_kv=max_seqlen_kv,
                 batch_size=img_k.shape[0],
+                mode=attention_mode,
             )
         else:
             attn = parallel_attention(
@@ -206,6 +217,7 @@ class MMDoubleStreamBlock(nn.Module):
                 img_kv_len=img_k.shape[1],
                 cu_seqlens_q=cu_seqlens_q,
                 cu_seqlens_kv=cu_seqlens_kv,
+                mode=attention_mode,
             )
 
         # attention computation end
@@ -349,6 +361,7 @@ class MMSingleStreamBlock(nn.Module):
                 max_seqlen_q=max_seqlen_q,
                 max_seqlen_kv=max_seqlen_kv,
                 batch_size=x.shape[0],
+                mode=attention_mode,
             )
         else:
             attn = parallel_attention(
@@ -360,6 +373,7 @@ class MMSingleStreamBlock(nn.Module):
                 img_kv_len=img_k.shape[1],
                 cu_seqlens_q=cu_seqlens_q,
                 cu_seqlens_kv=cu_seqlens_kv,
+                mode=attention_mode,
             )
         # attention computation end
 
@@ -564,16 +578,22 @@ class HYVideoDiffusionTransformer(torch.nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        t: torch.Tensor,  # Should be in range(0, 1000).
-        text_states: torch.Tensor = None,
-        text_mask: torch.Tensor = None,  # Now we don't use it.
-        text_states_2: Optional[torch.Tensor] = None,  # Text embedding for modulation.
-        freqs_cos: Optional[torch.Tensor] = None,
-        freqs_sin: Optional[torch.Tensor] = None,
-        guidance: torch.Tensor = None,  # Guidance for modulation, should be cfg_scale x 1000.
-        return_dict: bool = True,
+        context: Dict,
+        **kwargs
     ) -> Union[torch.Tensor, Dict[str, torch.Tensor]]:
         out = {}
+        return_dict = False
+        guidance = None
+        text_mask = None
+
+        # Pull out the context
+        text_states = context["hv_llm_embeddings"]
+        text_states_2 = context["hv_clip_embeddings"]
+        t = context["timestep"]
+        freqs_cos = context["rope_frequencies_cos"]
+        freqs_sin = context["rope_frequencies_sin"]
+        text_mask = context["hv_llm_embeddings_attention_mask"]
+
         img = x
         txt = text_states
         _, _, ot, oh, ow = x.shape
@@ -601,10 +621,12 @@ class HYVideoDiffusionTransformer(torch.nn.Module):
 
         # Embed image and text.
         img = self.img_in(img)
+
         if self.text_projection == "linear":
             txt = self.txt_in(txt)
         elif self.text_projection == "single_refiner":
             txt = self.txt_in(txt, t, text_mask if self.use_attention_mask else None)
+
         else:
             raise NotImplementedError(
                 f"Unsupported text_projection: {self.text_projection}"
@@ -621,7 +643,7 @@ class HYVideoDiffusionTransformer(torch.nn.Module):
 
         freqs_cis = (freqs_cos, freqs_sin) if freqs_cos is not None else None
         # --------------------- Pass through DiT blocks ------------------------
-        for _, block in enumerate(self.double_blocks):
+        for block_idx, block in enumerate(self.double_blocks):
             double_block_args = [
                 img,
                 txt,
@@ -638,7 +660,7 @@ class HYVideoDiffusionTransformer(torch.nn.Module):
         # Merge txt and img to pass through single stream blocks.
         x = torch.cat((img, txt), 1)
         if len(self.single_blocks) > 0:
-            for _, block in enumerate(self.single_blocks):
+            for block_idx, block in enumerate(self.single_blocks):
                 single_block_args = [
                     x,
                     vec,

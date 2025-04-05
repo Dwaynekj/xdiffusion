@@ -305,16 +305,6 @@ class LTXVideoTransformer(torch.nn.Module):
         x: torch.Tensor,
         context: Dict,
         **kwargs
-        # indices_grid: torch.Tensor,
-        # encoder_hidden_states: Optional[torch.Tensor] = None,
-        # timestep: Optional[torch.LongTensor] = None,
-        # class_labels: Optional[torch.LongTensor] = None,
-        # cross_attention_kwargs: Dict[str, Any] = None,
-        # attention_mask: Optional[torch.Tensor] = None,
-        # encoder_attention_mask: Optional[torch.Tensor] = None,
-        # skip_layer_mask: Optional[torch.Tensor] = None,
-        # skip_layer_strategy: Optional[SkipLayerStrategy] = None,
-        # return_dict: bool = True,
     ):
         B, C, F, H, W = x.shape
 

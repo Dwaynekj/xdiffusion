@@ -1,11 +1,11 @@
 import math
 import torch
 import torch.nn as nn
-from typing import Tuple, Union
+from typing import Dict, List
 
-from xdiffusion.layers.utils import to_2tuple, reshape_for_broadcast
+from xdiffusion.layers.hunyuan_video.rope import get_rotary_pos_embed
 from xdiffusion.layers.modulate import modulate
-
+from xdiffusion.layers.utils import to_2tuple
 
 class PatchEmbed(nn.Module):
     """2D Image to Patch Embedding
@@ -29,10 +29,7 @@ class PatchEmbed(nn.Module):
         norm_layer=None,
         flatten=True,
         bias=True,
-        dtype=None,
-        device=None,
     ):
-        factory_kwargs = {"dtype": dtype, "device": device}
         super().__init__()
         patch_size = to_2tuple(patch_size)
         self.patch_size = patch_size
@@ -44,7 +41,6 @@ class PatchEmbed(nn.Module):
             kernel_size=patch_size,
             stride=patch_size,
             bias=bias,
-            **factory_kwargs
         )
         nn.init.xavier_uniform_(self.proj.weight.view(self.proj.weight.size(0), -1))
         if bias:
@@ -67,21 +63,18 @@ class TextProjection(nn.Module):
     Adapted from https://github.com/PixArt-alpha/PixArt-alpha/blob/master/diffusion/model/nets/PixArt_blocks.py
     """
 
-    def __init__(self, in_channels, hidden_size, act_layer, dtype=None, device=None):
-        factory_kwargs = {"dtype": dtype, "device": device}
+    def __init__(self, in_channels, hidden_size, act_layer):
         super().__init__()
         self.linear_1 = nn.Linear(
             in_features=in_channels,
             out_features=hidden_size,
             bias=True,
-            **factory_kwargs
         )
         self.act_1 = act_layer()
         self.linear_2 = nn.Linear(
             in_features=hidden_size,
             out_features=hidden_size,
             bias=True,
-            **factory_kwargs
         )
 
     def forward(self, caption):
@@ -130,10 +123,7 @@ class TimestepEmbedder(nn.Module):
         frequency_embedding_size=256,
         max_period=10000,
         out_size=None,
-        dtype=None,
-        device=None,
     ):
-        factory_kwargs = {"dtype": dtype, "device": device}
         super().__init__()
         self.frequency_embedding_size = frequency_embedding_size
         self.max_period = max_period
@@ -142,10 +132,10 @@ class TimestepEmbedder(nn.Module):
 
         self.mlp = nn.Sequential(
             nn.Linear(
-                frequency_embedding_size, hidden_size, bias=True, **factory_kwargs
+                frequency_embedding_size, hidden_size, bias=True
             ),
             act_layer(),
-            nn.Linear(hidden_size, out_size, bias=True, **factory_kwargs),
+            nn.Linear(hidden_size, out_size, bias=True),
         )
         nn.init.normal_(self.mlp[0].weight, std=0.02)
         nn.init.normal_(self.mlp[2].weight, std=0.02)
@@ -165,21 +155,19 @@ class FinalLayer(nn.Module):
     """
 
     def __init__(
-        self, hidden_size, patch_size, out_channels, act_layer, device=None, dtype=None
+        self, hidden_size, patch_size, out_channels, act_layer
     ):
-        factory_kwargs = {"device": device, "dtype": dtype}
         super().__init__()
 
         # Just use LayerNorm for the final layer
         self.norm_final = nn.LayerNorm(
-            hidden_size, elementwise_affine=False, eps=1e-6, **factory_kwargs
+            hidden_size, elementwise_affine=False, eps=1e-6
         )
         if isinstance(patch_size, int):
             self.linear = nn.Linear(
                 hidden_size,
                 patch_size * patch_size * out_channels,
                 bias=True,
-                **factory_kwargs
             )
         else:
             self.linear = nn.Linear(
@@ -193,7 +181,7 @@ class FinalLayer(nn.Module):
         # Here we don't distinguish between the modulate types. Just use the simple one.
         self.adaLN_modulation = nn.Sequential(
             act_layer(),
-            nn.Linear(hidden_size, 2 * hidden_size, bias=True, **factory_kwargs),
+            nn.Linear(hidden_size, 2 * hidden_size, bias=True),
         )
         # Zero-initialize the modulation
         nn.init.zeros_(self.adaLN_modulation[1].weight)
@@ -205,60 +193,50 @@ class FinalLayer(nn.Module):
         x = self.linear(x)
         return x
 
+class RopeFrequencies(nn.Module):
+    def __init__(
+        self,
+        context_output_key: str,
+        video_length: int,
+        height: int,
+        width: int,
+        patch_size: int,
+        rope_theta: float,
+        model_hidden_size: int,
+        model_heads_num: int,
+        rope_dim_list: List[int],
+        vae_spec: str,
+        **kwargs,
+    ):
+        super().__init__()
+        self.context_output_key = context_output_key
+        self.video_length = video_length
+        self.video_height = height
+        self.video_width = width
+        self.patch_size = patch_size
+        self.rope_theta = rope_theta
+        self.model_hidden_size = model_hidden_size
+        self.model_heads_num = model_heads_num
+        self.rope_dim_list = rope_dim_list
+        self.vae_spec = vae_spec
 
-def rotate_half(x):
-    x_real, x_imag = (
-        x.float().reshape(*x.shape[:-1], -1, 2).unbind(-1)
-    )  # [B, S, H, D//2]
-    return torch.stack([-x_imag, x_real], dim=-1).flatten(3)
-
-
-def apply_rotary_emb(
-    xq: torch.Tensor,
-    xk: torch.Tensor,
-    freqs_cis: Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]],
-    head_first: bool = False,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Apply rotary embeddings to input tensors using the given frequency tensor.
-
-    This function applies rotary embeddings to the given query 'xq' and key 'xk' tensors using the provided
-    frequency tensor 'freqs_cis'. The input tensors are reshaped as complex numbers, and the frequency tensor
-    is reshaped for broadcasting compatibility. The resulting tensors contain rotary embeddings and are
-    returned as real tensors.
-
-    Args:
-        xq (torch.Tensor): Query tensor to apply rotary embeddings. [B, S, H, D]
-        xk (torch.Tensor): Key tensor to apply rotary embeddings.   [B, S, H, D]
-        freqs_cis (torch.Tensor or tuple): Precomputed frequency tensor for complex exponential.
-        head_first (bool): head dimension first (except batch dim) or not.
-
-    Returns:
-        Tuple[torch.Tensor, torch.Tensor]: Tuple of modified query tensor and key tensor with rotary embeddings.
-
-    """
-    xk_out = None
-    if isinstance(freqs_cis, tuple):
-        cos, sin = reshape_for_broadcast(freqs_cis, xq, head_first)  # [S, D]
-        cos, sin = cos.to(xq.device), sin.to(xq.device)
-        # real * cos - imag * sin
-        # imag * cos + real * sin
-        xq_out = (xq.float() * cos + rotate_half(xq.float()) * sin).type_as(xq)
-        xk_out = (xk.float() * cos + rotate_half(xk.float()) * sin).type_as(xk)
-    else:
-        # view_as_complex will pack [..., D/2, 2](real) to [..., D/2](complex)
-        xq_ = torch.view_as_complex(
-            xq.float().reshape(*xq.shape[:-1], -1, 2)
-        )  # [B, S, H, D//2]
-        freqs_cis = reshape_for_broadcast(freqs_cis, xq_, head_first).to(
-            xq.device
-        )  # [S, D//2] --> [1, S, 1, D//2]
-        # (real, imag) * (cos, sin) = (real * cos - imag * sin, imag * cos + real * sin)
-        # view_as_real will expand [..., D/2](complex) to [..., D/2, 2](real)
-        xq_out = torch.view_as_real(xq_ * freqs_cis).flatten(3).type_as(xq)
-        xk_ = torch.view_as_complex(
-            xk.float().reshape(*xk.shape[:-1], -1, 2)
-        )  # [B, S, H, D//2]
-        xk_out = torch.view_as_real(xk_ * freqs_cis).flatten(3).type_as(xk)
-
-    return xq_out, xk_out
+    def forward(
+        self,
+        context: Dict,
+        device,
+        **kwargs,
+    ):
+        freqs_cos, freqs_sin = get_rotary_pos_embed(
+            video_length=self.video_length,
+            height=self.video_height,
+            width=self.video_width,
+            patch_size=self.patch_size,
+            rope_theta=self.rope_theta,
+            model_hidden_size=self.model_hidden_size,
+            model_heads_num=self.model_heads_num,
+            rope_dim_list=self.rope_dim_list,
+            vae_spec=self.vae_spec
+        )
+        context[self.context_output_key + "_cos"] = freqs_cos.to(device)
+        context[self.context_output_key + "_sin"] = freqs_sin.to(device)
+        return context

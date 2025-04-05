@@ -37,7 +37,7 @@ diffusion:
       - target: xdiffusion.layers.hunyuan_video.text_encoder.TextEncoder
         params:
           model: "xtuner/llava-llama-3-8b-v1_1-transformers"
-          text_encoder_type: "llm"
+          text_encoder_type: "llava_llm"
           # The max length of the text token sequence
           max_length: 256
           hidden_state_skip_layer: 2
@@ -53,10 +53,20 @@ diffusion:
           text_encoder_type: "clipL"
           # The max length of the text token sequence
           max_length: 77
-          prompt_template: "dit-llm-encode"
-          prompt_template_video: "dit-llm-encode-video"
           context_output_key: "hv_clip_embeddings"
           context_input_key: "text_prompts"
+      - target: xdiffusion.layers.hunyuan_video.embedding.RopeFrequencies
+        params:
+          context_output_key: "rope_frequencies"
+          video_length: 29
+          height: 64
+          width: 64
+          patch_size: [1, 2, 2]
+          rope_theta: 256
+          model_hidden_size: 768
+          model_heads_num: 6
+          rope_dim_list: [16, 56, 56]
+          vae_spec: "884-16c-hy"
   # A preprocessor for input to the model.
   input_preprocessing:
     target: xdiffusion.context.IgnoreInputPreprocessor
@@ -84,7 +94,6 @@ diffusion:
   # The latent encoder for converting from pixel space to latent space
   latent_encoder:
     target: xdiffusion.autoencoders.hunyuan.HunyuanCausal3DVAE
-    instantiate_with_config_struct: True
     params:
       in_channels: 1
       out_channels: 1
@@ -118,9 +127,7 @@ diffusion:
       mid_block_add_attention: True
 
       # How to predict the variance. Can be "per_channel" or "uniform".
-      # For moving MNIST, "per_channel" will mode collapse because the distributions
-      # are too simple.
-      latent_logvar: "uniform"
+      latent_logvar: "per_channel"
 
       # These settings are configured for a Moving MNIST version of this
       # 3D VAE. In particular, it's challenging for such a large VAE to reconstruct
@@ -143,13 +150,15 @@ diffusion:
           # The weight for the KL divergence loss
           kl_weight: 1.0e-06
           # The iteration to start the discriminator
-          disc_start: 10000
-          # The weight for the discriminator loss
-          disc_weight: 0.05
+          disc_start: 0
           # The number of input channels to the discriminator
           disc_in_channels: 1
           # True if the discriminator is conditional.
-          disc_conditional: false
+          disc_conditional: False
+          # The iteration to start the adversarial loss
+          adversarial_start: 10000
+          # The weight to use for the adversarial loss
+          adversarial_weight: 0.05
           # The iteration to start the wavelet loss
           wavelet_start: 0
           # The weight to use for the wavelet loss
@@ -165,6 +174,7 @@ diffusion:
           # True if we should calculate the NLL of the reconstruction loss,
           # False to use the reconstruction loss directly.
           use_nll: False
+          use_adaptive_adversarial_weight: False
 
   # Defines the score network for predicting the noise parameter. This score
   # network accepts latent space input of shape (B,16,8,8,8).
@@ -186,7 +196,8 @@ diffusion:
       in_channels:  16  # Should be VAE.config.latent_channels.
       out_channels: 16
       hidden_size: 768
-      heads_num: 12
+      # hidden_size / heads_num = sum(rope_dim_list)
+      heads_num: 6
       mlp_width_ratio: 4.0
       mlp_act_type: "gelu_tanh"
       mm_double_blocks_depth: 6

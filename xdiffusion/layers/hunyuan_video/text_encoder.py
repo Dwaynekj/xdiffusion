@@ -3,7 +3,7 @@ from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn as nn
-from transformers import CLIPTextModel, CLIPTokenizer, AutoTokenizer, AutoModel
+from transformers import CLIPTextModel, CLIPTokenizer, AutoTokenizer, AutoModel, AutoProcessor, LlavaForConditionalGeneration
 from transformers.utils import ModelOutput
 
 import xdiffusion.layers.hunyuan_video.constants as constants
@@ -26,6 +26,12 @@ def load_text_encoder(
             text_encoder_path, low_cpu_mem_usage=True
         )
         text_encoder.final_layer_norm = text_encoder.norm
+    elif text_encoder_type == "llava_llm":
+        model = LlavaForConditionalGeneration.from_pretrained(
+            text_encoder_path,
+            low_cpu_mem_usage=True,
+        )
+        text_encoder = model.language_model
     else:
         raise ValueError(f"Unsupported text encoder type: {text_encoder_type}")
     # from_pretrained will ensure that the model is in eval mode.
@@ -48,6 +54,9 @@ def load_tokenizer(tokenizer_type, tokenizer_path, padding_side="right"):
         tokenizer = AutoTokenizer.from_pretrained(
             tokenizer_path, padding_side=padding_side
         )
+    elif tokenizer_type == "llava_llm":
+        processor = AutoProcessor.from_pretrained(tokenizer_path, padding_size=padding_side)
+        tokenizer = processor.tokenizer
     else:
         raise ValueError(f"Unsupported tokenizer type: {tokenizer_type}")
 
@@ -120,12 +129,12 @@ class TextEncoder(nn.Module):
             input_max_length if input_max_length is not None else max_length
         )
         self.prompt_template = (
-            constants.PROMPT_TEMPLATE["prompt_template"]
+            constants.PROMPT_TEMPLATE[prompt_template]
             if prompt_template is not None
             else None
         )
         self.prompt_template_video = (
-            constants.PROMPT_TEMPLATE_ENCODE_VIDEO["prompt_template_video"]
+            constants.PROMPT_TEMPLATE[prompt_template_video]
             if prompt_template_video is not None
             else None
         )
@@ -342,7 +351,7 @@ class TextEncoder(nn.Module):
             return_texts=return_texts,
             data_type="video",
         )
-        context[self.context_output_key] = prompt_outputs.hidden_state
+        context[self.context_output_key] = prompt_outputs.hidden_state.to(device)
         attention_mask = prompt_outputs.attention_mask
         if attention_mask is not None:
             num_videos_per_prompt = 1
@@ -351,5 +360,5 @@ class TextEncoder(nn.Module):
             attention_mask = attention_mask.view(
                 bs_embed * num_videos_per_prompt, seq_len
             )
-            context[self.context_output_key + "_attention_mask"] = attention_mask
+            context[self.context_output_key + "_attention_mask"] = attention_mask.to(device)
         return context
